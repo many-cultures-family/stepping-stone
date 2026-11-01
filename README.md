@@ -9,7 +9,7 @@
 DIDIMDOL/
   frontend/   # React(Vite) 화면 (실행 방법은 frontend/README.md)
   backend/    # FastAPI 서버
-  test/
+  tests/      # 서버 테스트 (pytest)
 ```
 
 ## 버전 선정
@@ -43,8 +43,77 @@ DIDIMDOL/
 | Python venv 위치 | 백엔드 폴더 루트 (`backend/`) |
 | `.gitignore` | 그대로 둔다 |
 
-## 실행
+## 통합 실행
 
-화면: [frontend/README.md](frontend/README.md) 참고. 개발 서버는 `http://localhost:5173`.
+서버(8080)와 화면(5173)을 터미널 두 개에서 각각 띄운다. 아래 명령은 모두 프로젝트 루트 기준이다.
 
-서버: [backend/README.md](backend/README.md) 참고. FastAPI 서버는 Uvicorn 사용 `http://localhost:8080`.
+### 처음 한 번만: 설치
+
+코드 블록은 그대로 복사해 붙여넣을 수 있도록 주석을 넣지 않았다.
+
+1. Python 3.14, Node 24 설치. `node@24`는 Homebrew가 PATH에 자동으로 연결하지 않으므로 직접 연결한다. 다른 버전의 `node`가 이미 연결돼 있으면 `brew unlink node`를 먼저 실행한다.
+
+```bash
+brew install python@3.14 node@24
+brew link --overwrite node@24
+node -v
+```
+
+`node -v`가 `v24.x`로 나오면 된다.
+
+2. 서버 라이브러리 설치. venv는 `backend/` 안에 만든다.
+
+```bash
+python3.14 -m venv backend/.venv
+backend/.venv/bin/pip install -r requirements.txt
+```
+
+3. 화면 라이브러리 설치와 환경 변수 파일 복사. 실서버에 붙이려면 `frontend/.env.local`에서 `VITE_USE_MOCK=false`로 바꾼다.
+
+```bash
+cd frontend
+npm install
+cp .env.example .env.local
+cd ..
+```
+
+### 터미널 1: 서버
+
+```bash
+cd backend
+source .venv/bin/activate
+uvicorn main:app --reload --port 8080
+```
+
+`http://localhost:8080/health`가 `{"status": "ok"}`를 돌려주면 정상. API 문서는 `http://localhost:8080/docs`.
+
+### 터미널 2: 화면
+
+```bash
+cd frontend
+npm run dev
+```
+
+브라우저에서 `http://localhost:5173`을 연다. `/api` 요청은 Vite proxy가 8080 서버로 넘긴다.
+
+### 테스트·린트
+
+프로젝트 루트에서 실행한다. `pytest.ini`가 `backend/`를 import 경로에 넣어 준다.
+
+서버 테스트(`tests/`)와 서버 린트·포맷:
+
+```bash
+source backend/.venv/bin/activate
+pytest
+ruff check backend tests
+ruff format backend tests
+```
+
+화면 린트:
+
+```bash
+cd frontend
+npm run lint
+```
+
+자세한 내용은 [frontend/README.md](frontend/README.md), [backend/README.md](backend/README.md) 참고.
