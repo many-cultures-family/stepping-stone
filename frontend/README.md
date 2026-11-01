@@ -1,6 +1,6 @@
 # 디딤돌 프론트엔드
 
-React(Vite) + MUI, JavaScript. 기술 스택 근거는 팀 `docs/STACK.md` (A안: React + FastAPI).
+React(Vite) + MUI, JavaScript. 기술 스택 근거는 [AI-service 레포의 STACK.md](https://github.com/many-cultures-family/AI-service/blob/main/docs/STACK.md) (A안: React + FastAPI).
 
 ## 버전 선정
 
