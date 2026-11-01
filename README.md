@@ -1,7 +1,7 @@
 # 디딤돌
 
 항목 검증 + LLM/번역기 풀이 + LLM 수정 제안을 제공하는 웹 서비스.
-기술 스택 근거는 `docs/STACK.md` (A안: React + FastAPI).
+기술 스택 근거는 [AI-service 레포의 STACK.md](https://github.com/many-cultures-family/AI-service/blob/main/docs/STACK.md) (A안: React + FastAPI).
 
 ## 폴더 구조
 
