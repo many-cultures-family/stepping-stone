@@ -7,10 +7,17 @@
 
 ```
 DIDIMDOL/
-  frontend/   # React(Vite) 화면 (실행 방법은 frontend/README.md)
-  backend/    # FastAPI 서버
-  tests/      # 서버 테스트 (pytest)
+  frontend/            # React(Vite) 화면 (실행 방법은 frontend/README.md)
+    src/               # 화면 코드 (개발자2)
+  backend/             # FastAPI 서버
+    app/               # 서버 코드 (개발자1)
+    tests/             # 서버 테스트, pytest (테스트 담당)
+    requirements.txt   # 서버 의존성 (공유, 테크리더)
+    ruff.toml          # 서버 린트·포맷 설정 (공유, 테크리더)
+    .env.example       # 서버 환경 변수 이름 (공유, 테크리더)
 ```
+
+담당 폴더와 공유 파일 규칙은 AI-service 레포의 `docs/CODE-STYLE.md`를 따른다. 공유 파일(설정·의존성 파일, `.gitignore`)이 바뀌어야 하면 테크리더에게 PR 댓글로 요청한다.
 
 ## 버전 선정
 
@@ -65,8 +72,11 @@ node -v
 
 ```bash
 python3.14 -m venv backend/.venv
-backend/.venv/bin/pip install -r requirements.txt
+backend/.venv/bin/pip install -r backend/requirements.txt
+cp backend/.env.example backend/.env
 ```
+
+`backend/.env`에는 각자 값을 채운다. 이 파일은 커밋하지 않는다.
 
 3. 화면 라이브러리 설치와 환경 변수 파일 복사. 실서버에 붙이려면 `frontend/.env.local`에서 `VITE_USE_MOCK=false`로 바꾼다.
 
@@ -82,10 +92,10 @@ cd ..
 ```bash
 cd backend
 source .venv/bin/activate
-uvicorn main:app --reload --port 8080
+uvicorn app.main:app --reload --port 8080
 ```
 
-`http://localhost:8080/health`가 `{"status": "ok"}`를 돌려주면 정상. API 문서는 `http://localhost:8080/docs`.
+`http://localhost:8080/api/health`가 `{"status": "ok"}`를 돌려주면 정상. API 문서는 `http://localhost:8080/docs`.
 
 ### 터미널 2: 화면
 
@@ -98,15 +108,17 @@ npm run dev
 
 ### 테스트·린트
 
-프로젝트 루트에서 실행한다. `pytest.ini`가 `backend/`를 import 경로에 넣어 준다.
+`backend/`에서 실행한다. `backend/pytest.ini`가 `backend/`를 import 경로에 넣어 준다.
 
-서버 테스트(`tests/`)와 서버 린트·포맷:
+서버 테스트(`backend/tests/`)와 서버 린트·포맷:
 
 ```bash
-source backend/.venv/bin/activate
+cd backend
+source .venv/bin/activate
 pytest
-ruff check backend tests
-ruff format backend tests
+ruff check .
+ruff format --check .
+cd ..
 ```
 
 화면 린트:
