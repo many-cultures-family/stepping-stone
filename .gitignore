@@ -1,2 +1,21 @@
+# 개인 설정
 .DS_Store
 .idea/
+CLAUDE.local.md
+.claude/settings.local.json
+
+# 비밀값
+.env
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+
+# SQLite DB
+*.db
+*.sqlite3
+
+# 사용자가 올린 문서 (실제 사용자 문서는 올리지 않는다)
+backend/uploads/
