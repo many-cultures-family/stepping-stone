@@ -1,5 +1,7 @@
 fastapi==0.162.0
 uvicorn==0.54.0
+# 파일 업로드(multipart/form-data)를 받을 때 FastAPI가 필요로 함 (US-01, POST /api/drafts)
+python-multipart
 ruff
 pytest
 httpx2
