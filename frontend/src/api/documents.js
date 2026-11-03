@@ -1,15 +1,15 @@
-// 서류 검증 관련 API.
-// 엔드포인트 경로·요청/응답 형식은 백엔드와 아직 확정 전 (확인 필요).
+// 서류 관련 API.
+// 업로드는 docs/API.md 항목 1 (POST /api/drafts, [제안]). 검증 결과·수정 제안은 아직 확정 전 (US-02 이후).
 // 확정되면 여기만 고치면 되도록 화면 코드는 이 함수들만 쓴다.
 import { request, USE_MOCK } from './client.js'
 import * as mock from '../mocks/documents.js'
 
-/** 서류 업로드 → { documentId } */
+/** 문서 올리기 → { draft: { id, status, step }, document: { mime_type, page_count } } */
 export function uploadDocument(file) {
   if (USE_MOCK) return mock.uploadDocument(file)
   const form = new FormData()
   form.append('file', file)
-  return request('/documents', { method: 'POST', body: form })
+  return request('/drafts', { method: 'POST', body: form })
 }
 
 /**
