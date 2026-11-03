@@ -64,7 +64,7 @@ export default function UploadPage() {
       <Stack spacing={3}>
         <div>
           <Typography variant="h5" sx={{ fontWeight: 700 }}>
-            서류 올리기
+            문서 올리기
           </Typography>
           <Typography color="text.secondary">
             {ALLOWED_TYPES_LABEL} 파일을 올리면 작성 건이 만들어져요.
