@@ -2,7 +2,7 @@ import { AppBar, Box, Container, Toolbar, Typography } from '@mui/material'
 
 export default function Layout({ onHome, children }) {
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'grey.50' }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       <AppBar position="static" elevation={0}>
         <Toolbar>
           <Typography

@@ -24,18 +24,21 @@ let items = [
   { id: 'phone', label: '연락처', value: '', status: 'warn', suggestion: '010-****-**** 형식으로 입력' },
 ].map((it) => ({ ...it, suggestionAccepted: false }))
 
-// docs/API.md 항목 1 의 허용 형식
-const ALLOWED_TYPES = ['application/pdf', 'image/png', 'image/jpeg']
+// docs/API.md 항목 1(POST /api/drafts)의 입력·출력 예시를 그대로 옮긴 목데이터.
+// VITE_USE_MOCK=false 로 바꾸면 실제 서버(POST /api/drafts) 응답을 쓴다.
+const ALLOWED_MIME_TYPES = ['application/pdf', 'image/png', 'image/jpeg']
+
+let nextDraftId = 1
 
 export async function uploadDocument(file) {
   await delay(500)
   if (!file) throw new ApiError('파일 없음', { status: 400, code: 'FILE_REQUIRED' })
-  if (!ALLOWED_TYPES.includes(file.type)) {
+  if (!ALLOWED_MIME_TYPES.includes(file.type)) {
     throw new ApiError('허용하지 않는 형식', { status: 415, code: 'FILE_TYPE_NOT_ALLOWED' })
   }
-  // docs/API.md 항목 1 응답 예시
   return {
-    draft: { id: 1, status: '수정', step: 'upload' },
+    draft: { id: nextDraftId++, status: '수정', step: 'upload' },
+    // page_count 는 실제로는 서버가 계산한다 (이미지는 1, PDF는 API.md "아직 정하지 못한 것").
     document: { mime_type: file.type, page_count: 1 },
   }
 }

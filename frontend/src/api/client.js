@@ -23,6 +23,7 @@ export async function request(path, { body, ...options } = {}) {
       body: isForm || body === undefined ? body : JSON.stringify(body),
     })
   } catch {
+    // 서버가 꺼져 있거나 네트워크 오류 (DESIGN.md "오류" 상태: "서버 연결 실패")
     throw new ApiError('서버 연결 실패', { code: 'NETWORK_ERROR' })
   }
 
@@ -31,14 +32,22 @@ export async function request(path, { body, ...options } = {}) {
     let code = null
     try {
       const data = await res.json()
-      // 오류 형식: { "detail": { "code": ... } } (docs/API.md). FastAPI 기본 형식은 { "detail": "..." }
-      if (typeof data.detail === 'string') message = data.detail
-      else if (data.detail?.code) code = data.detail.code
+      if (typeof data.detail === 'string') {
+        // FastAPI 기본 에러 형식: { "detail": "..." }
+        message = data.detail
+      } else if (data.detail && typeof data.detail.code === 'string') {
+        // API.md 오류 형식: { "detail": { "code": "..." } }
+        code = data.detail.code
+        message = code
+      }
     } catch {
       // 본문이 JSON이 아니면 기본 메시지 사용
     }
-    // 서버가 꺼져 있으면 fetch는 성공하고 Vite proxy가 502를 돌려준다
-    if (!code && [502, 503, 504].includes(res.status)) code = 'NETWORK_ERROR'
+    // 서버가 꺼져 있으면 fetch 자체는 성공하고 Vite 프록시가 502 등을 돌려준다
+    if (!code && [502, 503, 504].includes(res.status)) {
+      code = 'NETWORK_ERROR'
+      message = '서버 연결 실패'
+    }
     throw new ApiError(message, { status: res.status, code })
   }
 
