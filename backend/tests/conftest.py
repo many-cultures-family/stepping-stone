@@ -1,7 +1,11 @@
 import sqlite3
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+
+# 개인정보 없는 가짜 입력 파일 (빈 1페이지 PDF, 흰색 1x1 PNG·JPG)
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 
 @pytest.fixture
