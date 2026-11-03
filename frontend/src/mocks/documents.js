@@ -1,6 +1,8 @@
 // 백엔드 없이 화면을 먼저 만들기 위한 목데이터.
 // VITE_USE_MOCK=true 일 때 src/api/documents.js 가 이 함수들을 대신 호출한다.
 
+import { ApiError } from '../api/client.js'
+
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const EXPLANATIONS = {
@@ -22,9 +24,20 @@ let items = [
   { id: 'phone', label: '연락처', value: '', status: 'warn', suggestion: '010-****-**** 형식으로 입력' },
 ].map((it) => ({ ...it, suggestionAccepted: false }))
 
-export async function uploadDocument() {
+// docs/API.md 항목 1 의 허용 형식
+const ALLOWED_TYPES = ['application/pdf', 'image/png', 'image/jpeg']
+
+export async function uploadDocument(file) {
   await delay(500)
-  return { documentId: 'mock-1' }
+  if (!file) throw new ApiError('파일 없음', { status: 400, code: 'FILE_REQUIRED' })
+  if (!ALLOWED_TYPES.includes(file.type)) {
+    throw new ApiError('허용하지 않는 형식', { status: 415, code: 'FILE_TYPE_NOT_ALLOWED' })
+  }
+  // docs/API.md 항목 1 응답 예시
+  return {
+    draft: { id: 1, status: '수정', step: 'upload' },
+    document: { mime_type: file.type, page_count: 1 },
+  }
 }
 
 export async function getValidationResult(documentId, lang) {
