@@ -1,0 +1,9 @@
+fastapi==0.162.0
+uvicorn==0.54.0
+# 파일 업로드(multipart/form-data)를 받을 때 FastAPI가 필요로 함 (US-01, POST /api/drafts)
+python-multipart==0.0.33
+# PDF 쪽수 확인 (US-01)
+pypdf==6.21.4
+ruff==0.17.3
+pytest==9.2.0
+httpx2==2.16.0

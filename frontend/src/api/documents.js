@@ -1,15 +1,20 @@
-// 서류 검증 관련 API.
-// 엔드포인트 경로·요청/응답 형식은 백엔드와 아직 확정 전 (확인 필요).
+// 서류 관련 API.
+// 업로드는 docs/API.md 항목 1 (POST /api/drafts, [제안]). 검증 결과·수정 제안은 아직 확정 전 (US-02 이후).
 // 확정되면 여기만 고치면 되도록 화면 코드는 이 함수들만 쓴다.
 import { request, USE_MOCK } from './client.js'
 import * as mock from '../mocks/documents.js'
 
-/** 서류 업로드 → { documentId } */
+/**
+ * 서류 올리기 (US-01 #1, API.md 항목 1 `POST /api/drafts`)
+ * → { draft: { id, status, step }, document: { mime_type, page_count } }
+ * 성공하면 작성 건이 status=`수정`/step=`upload`(backlog '업로드됨')로 생긴다.
+ * VITE_USE_MOCK=true 에서는 mocks/documents.js 의 임시 응답(API.md 예시 기반)을 쓴다.
+ */
 export function uploadDocument(file) {
   if (USE_MOCK) return mock.uploadDocument(file)
   const form = new FormData()
   form.append('file', file)
-  return request('/documents', { method: 'POST', body: form })
+  return request('/drafts', { method: 'POST', body: form })
 }
 
 /**

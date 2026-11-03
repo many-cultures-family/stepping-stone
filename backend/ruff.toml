@@ -1,0 +1,6 @@
+# 서버 린트·포맷 설정 (CODE-STYLE.md 2번). backend/ 에서 `ruff check .`, `ruff format --check .`
+target-version = "py314"
+
+[lint]
+# 기본 규칙(E, F)에 import 정렬(I)만 추가
+extend-select = ["I"]

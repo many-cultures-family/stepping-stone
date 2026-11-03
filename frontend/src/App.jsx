@@ -1,20 +1,12 @@
-import { useState } from 'react'
 import Layout from './components/Layout.jsx'
 import UploadPage from './pages/UploadPage.jsx'
-import ResultPage from './pages/ResultPage.jsx'
 
-// 화면은 두 개뿐이라 라우터 없이 documentId 유무로 전환한다.
-// documentId 가 없으면 업로드 화면, 있으면 해당 서류의 검증 결과 화면.
+// US-01 #1(서류 올리기)만 만드는 동안은 업로드 화면만 보여준다.
+// 입력 항목 확인(ResultPage, US-02 이후 범위)은 아직 연결하지 않는다.
 export default function App() {
-  const [documentId, setDocumentId] = useState(null)
-
   return (
-    <Layout onHome={() => setDocumentId(null)}>
-      {documentId ? (
-        <ResultPage key={documentId} documentId={documentId} />
-      ) : (
-        <UploadPage onUploaded={setDocumentId} />
-      )}
+    <Layout>
+      <UploadPage />
     </Layout>
   )
 }
