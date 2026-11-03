@@ -1,11 +1,11 @@
 from contextlib import asynccontextmanager
 
-import db
-import drafts
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+
+from app import db, drafts
 
 
 @asynccontextmanager
@@ -31,6 +31,6 @@ async def validation_error(request: Request, exc: RequestValidationError):
     return await request_validation_exception_handler(request, exc)
 
 
-@app.get("/health")
+@app.get("/api/health")
 def health():
     return {"status": "ok"}

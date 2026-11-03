@@ -28,18 +28,18 @@ source .venv/bin/activate
 
 ### 3. 라이브러리 설치
 
-`requirements.txt`는 프로젝트 최상위 디렉터리에 있습니다.
+`requirements.txt`는 `backend/` 안에 있습니다.
 
 ```bash
-pip install -r ../requirements.txt
+pip install -r requirements.txt
 ```
 
 ### 4. 서버 실행
 
-`backend/main.py`에 FastAPI 앱 객체 `app`이 정의되어 있는 경우 실행합니다.
+FastAPI 앱 객체 `app`은 `backend/app/main.py`에 있습니다.
 
 ```bash
-uvicorn main:app --reload --port 8080
+uvicorn app.main:app --reload --port 8080
 ```
 
 ### 5. API 문서 확인
@@ -58,5 +58,6 @@ deactivate
 ### 참고 사항
 
 - `.venv/`는 GitHub에 커밋하지 않습니다.
-- 필요한 라이브러리는 최상위 `requirements.txt`에서 관리합니다.
+- 필요한 라이브러리는 `backend/requirements.txt`에서 관리합니다. 공유 파일이라 테크리더만 고칩니다. 추가가 필요하면 PR 댓글로 요청합니다.
+- 비밀값은 `backend/.env`에만 둡니다. 변수 이름은 `backend/.env.example`을 봅니다.
 - 프론트엔드와의 API 경로 및 요청·응답 형식은 협의 후 확정합니다.

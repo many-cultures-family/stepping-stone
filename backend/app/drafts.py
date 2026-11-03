@@ -5,10 +5,11 @@ import uuid
 from pathlib import Path
 from typing import Annotated
 
-import db
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from pypdf import PdfReader
 from pypdf.errors import PyPdfError
+
+from app import db
 
 router = APIRouter(prefix="/api")
 
@@ -36,7 +37,7 @@ def count_pages(data, mime_type):
         return 1
     try:
         return len(PdfReader(io.BytesIO(data)).pages)
-    except (PyPdfError, AttributeError, KeyError, IndexError, TypeError, ValueError):
+    except PyPdfError, AttributeError, KeyError, IndexError, TypeError, ValueError:
         # 서명만 PDF이고 읽을 수 없는 파일. 깨진 PDF는 PdfReadError 말고도
         # AttributeError 등을 내므로 500 대신 415로 돌려준다
         raise HTTPException(status_code=415, detail={"code": "FILE_TYPE_NOT_ALLOWED"})

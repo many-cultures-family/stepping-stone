@@ -9,7 +9,7 @@ def client(tmp_path, monkeypatch):
     # 테스트마다 임시 DB·업로드 폴더를 쓴다
     monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "test.db"))
     monkeypatch.setenv("UPLOAD_DIR", str(tmp_path / "uploads"))
-    from main import app
+    from app.main import app
 
     with TestClient(app) as c:
         yield c
