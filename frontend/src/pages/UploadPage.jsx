@@ -2,14 +2,20 @@ import { useState } from 'react'
 import { Alert, Button, Paper, Stack, Typography } from '@mui/material'
 import { uploadDocument } from '../api/documents.js'
 
-// docs/API.md 항목 1 의 허용 형식
-const ACCEPT = 'application/pdf,image/png,image/jpeg'
+// US-01 #1 범위: PDF·이미지 파일을 올리면 작성 건이 '업로드됨'으로 생긴다 (first-feature.md 2절 #1).
+// 인식(OCR)·개인정보 가림·결과 확인(#2~#4)은 오늘 범위가 아니다.
+const ALLOWED_TYPES = ['application/pdf', 'image/png', 'image/jpeg']
+const ALLOWED_TYPES_LABEL = 'PDF, PNG, JPG'
 
-// 서버 오류 코드 → 화면 문장. 사용 언어별 문장은 아직 정하지 않아 한국어만 쓴다
+// API.md 오류 코드 → 사용 언어 문구 (DESIGN.md "오류" 상태: 오류 메시지 + 다시 시도)
 const ERROR_MESSAGES = {
-  FILE_REQUIRED: '파일을 골라 주세요.',
-  FILE_TYPE_NOT_ALLOWED: 'PDF, PNG, JPG 파일만 올릴 수 있어요.',
-  NETWORK_ERROR: '서버 연결 실패',
+  FILE_REQUIRED: '파일을 선택해 주세요.',
+  FILE_TYPE_NOT_ALLOWED: `${ALLOWED_TYPES_LABEL} 파일만 올릴 수 있어요. 다른 파일을 선택해 주세요.`,
+  NETWORK_ERROR: '서버 연결 실패. 잠시 후 다시 시도해 주세요.',
+}
+
+function errorMessage(e) {
+  return ERROR_MESSAGES[e.code] ?? '파일을 올리는 중 문제가 생겼어요. 다시 시도해 주세요.'
 }
 
 export default function UploadPage() {
@@ -22,21 +28,35 @@ export default function UploadPage() {
     if (!file) return
     setLoading(true)
     setError(null)
-    setDraft(null)
     try {
-      const result = await uploadDocument(file)
-      setDraft(result.draft)
+      const { draft: created } = await uploadDocument(file)
+      setDraft(created)
     } catch (e) {
-      setError(ERROR_MESSAGES[e.code] ?? e.message)
+      setError(errorMessage(e))
     } finally {
       setLoading(false)
     }
   }
 
-  function handleFileChange(e) {
-    setFile(e.target.files?.[0] ?? null)
+  function handleReset() {
+    setFile(null)
     setError(null)
     setDraft(null)
+  }
+
+  if (draft) {
+    return (
+      <Paper sx={{ p: 4 }}>
+        <Stack spacing={3}>
+          <Alert severity="success">
+            작성 건이 <strong>업로드됨</strong> 상태로 생겼어요. (작성 건 번호: {draft.id})
+          </Alert>
+          <Button variant="outlined" onClick={handleReset} sx={{ alignSelf: 'flex-start' }}>
+            다른 파일 올리기
+          </Button>
+        </Stack>
+      </Paper>
+    )
   }
 
   return (
@@ -47,13 +67,22 @@ export default function UploadPage() {
             문서 올리기
           </Typography>
           <Typography color="text.secondary">
-            작성할 신청서를 올려 주세요. PDF, PNG, JPG 파일을 올릴 수 있어요.
+            {ALLOWED_TYPES_LABEL} 파일을 올리면 작성 건이 만들어져요.
           </Typography>
         </div>
 
         <Button variant="outlined" component="label">
           {file ? file.name : '파일 선택'}
-          <input hidden type="file" accept={ACCEPT} aria-label="올릴 문서 파일" onChange={handleFileChange} />
+          <input
+            hidden
+            type="file"
+            accept={ALLOWED_TYPES.join(',')}
+            aria-label={`서류 파일 선택 (${ALLOWED_TYPES_LABEL})`}
+            onChange={(e) => {
+              setError(null)
+              setFile(e.target.files?.[0] ?? null)
+            }}
+          />
         </Button>
 
         {error && (
@@ -69,10 +98,8 @@ export default function UploadPage() {
           </Alert>
         )}
 
-        {draft && <Alert severity="success">올렸어요. 작성 건 {draft.id}번이 만들어졌어요 (업로드됨).</Alert>}
-
         <Button variant="contained" size="large" disabled={!file || loading} onClick={handleSubmit}>
-          {loading ? '올리는 중…' : '올리기'}
+          {loading ? '업로드 중…' : '업로드'}
         </Button>
       </Stack>
     </Paper>
