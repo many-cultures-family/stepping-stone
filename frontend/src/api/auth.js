@@ -1,16 +1,34 @@
-// 로그인 관련 API.
-// [미정] API.md에 로그인 엔드포인트가 아직 없다 (23·57·64번째 줄: 권한은 "오늘은 없음",
-// 다음에 Google 로그인으로 정하기로만 결정됨). 실제 경로·요청 방식이 정해지면 여기만 고친다.
-import { USE_MOCK } from './client.js'
+// 로그인 관련 API. docs/api/LOGIN-API.md 기준 (경로·응답 모양 그대로).
+import { request, USE_MOCK } from './client.js'
 import * as mock from '../mocks/auth.js'
 
+export const GOOGLE_LOGIN_URL = '/api/auth/google/login'
+
 /**
- * 구글 로그인 (화면만 범위, 서버 인증 처리는 별도 담당)
- * → { user: { google_sub, email, language } }
- * VITE_USE_MOCK=true 에서는 mocks/auth.js 의 임시 응답을 쓴다.
- * 엔드포인트가 정해지기 전에는 USE_MOCK=false여도 호출할 실제 주소가 없다.
+ * 로그인 시작 (LOGIN-API.md 항목 1).
+ * fetch가 아니라 페이지 이동으로 처리한다. 콜백·세션 생성은 서버가 다 하고 `/`로 돌려보낸다.
+ * [임시] VITE_USE_MOCK=true면 실제 이동 대신 mock 세션을 바로 로그인 상태로 만든다.
  */
-export function loginWithGoogle() {
-  if (USE_MOCK) return mock.loginWithGoogle()
-  throw new Error('[미정] 로그인 엔드포인트가 아직 API.md에 정해지지 않았습니다.')
+export function startGoogleLogin() {
+  if (USE_MOCK) return mock.startGoogleLogin()
+  window.location.href = GOOGLE_LOGIN_URL
+  return Promise.resolve()
+}
+
+/** GET /api/auth/me (LOGIN-API.md 항목 3) → { user: { email, language } }. 비로그인이면 401 LOGIN_REQUIRED */
+export function getMe() {
+  if (USE_MOCK) return mock.getMe()
+  return request('/auth/me')
+}
+
+/** PATCH /api/auth/me (LOGIN-API.md 항목 4) → { user }. 실패: 401 / 400 LANGUAGE_NOT_ALLOWED */
+export function updateLanguage(language) {
+  if (USE_MOCK) return mock.updateLanguage(language)
+  return request('/auth/me', { method: 'PATCH', body: { language } })
+}
+
+/** POST /api/auth/logout (LOGIN-API.md 항목 5) → 204 */
+export function logout() {
+  if (USE_MOCK) return mock.logout()
+  return request('/auth/logout', { method: 'POST' })
 }
