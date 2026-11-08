@@ -1,6 +1,6 @@
-import { AppBar, Box, Container, Toolbar, Typography } from '@mui/material'
+import { AppBar, Box, Button, Container, Toolbar, Typography } from '@mui/material'
 
-export default function Layout({ onHome, children }) {
+export default function Layout({ onHome, onLoginClick, children }) {
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       <AppBar position="static" elevation={0}>
@@ -12,6 +12,10 @@ export default function Layout({ onHome, children }) {
           >
             디딤돌
           </Typography>
+          <Box sx={{ flexGrow: 1 }} />
+          <Button color="inherit" onClick={onLoginClick}>
+            로그인
+          </Button>
         </Toolbar>
       </AppBar>
       <Container maxWidth="md" sx={{ py: 4 }}>
