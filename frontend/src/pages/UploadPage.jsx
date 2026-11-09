@@ -204,7 +204,7 @@ export default function UploadPage() {
                 <ShieldIcon size={28} />
               </Box>
               <Typography variant="body2" sx={{ color: ds.primaryDeep, fontWeight: 600 }}>
-                서류에 적힌 이름·연락처 같은 개인정보는 가린 뒤에만 AI에 보내요.
+                서류에 적힌 이름·연락처 같은 개인정보는 가린 뒤에만 AI에 보내는 것을 원칙으로 해요. (가리는 기능은 준비 중이에요.)
               </Typography>
             </Stack>
           </Stack>

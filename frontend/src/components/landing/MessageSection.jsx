@@ -18,7 +18,7 @@ export default function MessageSection() {
           scrollMarginTop: 96,
         }}
       >
-        <Box sx={{ ...squircle(radius.card), overflow: 'hidden', aspectRatio: { xs: '16 / 10', sm: '2 / 1', md: 'auto' }, minHeight: { md: 400 }, background: 'linear-gradient(180deg, #7DB6F5, #2F7BF5)' }}>
+        <Box sx={{ ...squircle(radius.card), overflow: 'hidden', aspectRatio: { xs: '16 / 10', sm: '2 / 1', md: 'auto' }, minHeight: { md: 400 }, background: 'linear-gradient(180deg, #7DB6F5, #4169D6)' }}>
           <GreetingIllustration />
         </Box>
 
@@ -72,7 +72,7 @@ export default function MessageSection() {
               개인정보 보호
             </Typography>
             <Typography variant="caption" sx={{ color: ds.text2 }}>
-              이름·연락처는 가린 뒤에만 AI에 보내요
+              개인정보는 가린 뒤에만 AI에 보내는 것을 원칙으로 해요
             </Typography>
           </Box>
         </Stack>

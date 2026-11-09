@@ -14,7 +14,7 @@ const STEPS = [
     body: '써야 할 칸, 필수 여부, 쓰는 형식을 찾아 내 나라 말로 알려 드려요. 틀리면 바로 고칠 수 있어요.',
     featured: true,
   },
-  { icon: PenIcon, title: '확인하고\n바로 작성하기', body: '확인한 칸에 맞춰 연습해 보고, 공식 사이트에서 직접 제출해요.' },
+  { icon: PenIcon, title: '확인하고\n바로 작성하기', body: '가상 작성 환경에서 한 번 써 보고, 공식 사이트에서 직접 제출해요. 여기서 쓴 내용은 기관에 전송되지 않아요.' },
 ]
 
 export default function StepsSection() {
