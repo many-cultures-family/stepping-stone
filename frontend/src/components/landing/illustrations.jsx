@@ -87,7 +87,7 @@ export function GreetingIllustration() {
       <defs>
         <linearGradient id="greet-bg" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#7DB6F5" />
-          <stop offset="1" stopColor="#2F7BF5" />
+          <stop offset="1" stopColor="#4169D6" />
         </linearGradient>
       </defs>
       <rect width="300" height="380" fill="url(#greet-bg)" />

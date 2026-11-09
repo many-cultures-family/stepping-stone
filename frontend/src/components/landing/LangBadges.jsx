@@ -6,7 +6,7 @@ import { SquircleTile } from '../ui.jsx'
 const BADGES = [
   { code: 'VI', bg: '#FFE3E3', fg: '#C2333A' },
   { code: '中', bg: '#FFF1D6', fg: '#B5650B' },
-  { code: 'EN', bg: '#E1EEFF', fg: '#1A5FD0' },
+  { code: 'EN', bg: '#E1EEFF', fg: '#2F54B0' },
 ]
 
 export default function LangBadges({ size = 42, border = ds.white }) {

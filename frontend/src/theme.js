@@ -4,27 +4,28 @@ import { createTheme } from '@mui/material/styles'
 // - 흰 바탕 + 하늘색 그라데이션 큰 카드(32px) + 회색 면 카드
 // - 알약(999px) 버튼: 주요 행동은 파랑, 상단·보조 강조는 검정(ink)
 // - Pretendard 큰 제목, 넓은 1200px 웹 그리드와 넉넉한 섹션 간격
-// 글자 대비: ink/흰 바탕 18:1, 흰 글자/primary(#2F7BF5) 3.9:1 → 버튼 글자는 굵은 16px 이상,
-//           본문 링크 등 작은 파란 글자는 primaryDeep(#1A5FD0, 5.6:1)을 쓴다.
+// 글자 대비(WCAG AA 4.5:1 이상, DESIGN.md 접근성 기준): 흰 글자/primary(#4169D6) 4.98:1,
+//           작은 파란 글자는 primaryDeep(#2F54B0, 흰 바탕 6.96:1), 보조 글자 muted(#657080, 흰 바탕 5.0:1 이상).
+//           primary 는 DESIGN.md 주 색상과 같다.
 export const ds = {
-  primary: '#2F7BF5',
-  primaryHover: '#1F66DB',
-  primaryDeep: '#1A5FD0',
-  primarySoft: '#EAF2FF',
-  primaryLine: '#BFD6FB',
+  primary: '#4169D6',
+  primaryHover: '#3459BD',
+  primaryDeep: '#2F54B0',
+  primarySoft: '#ECF1FC',
+  primaryLine: '#C3D1F2',
   ink: '#111418',
   inkHover: '#2A2F36',
   text: '#111418',
   text2: '#5B6472',
-  muted: '#9AA3AF',
+  muted: '#657080',
   surface: '#FFFFFF',
   card: '#F5F7F9',
   cardHover: '#EEF1F4',
   line: '#E8EBEF',
   lineStrong: '#D3D9E0',
-  red: '#E5484D',
+  red: '#C4343A',
   redSoft: '#FDECEC',
-  orange: '#B85F00',
+  orange: '#9C5000',
   orangeSoft: '#FFF2E2',
   green: '#12A150',
   greenSoft: '#E7F7EE',
@@ -78,7 +79,7 @@ export function squircleResponsive(map) {
 
 export const layout = { container: 1200, gutter: { xs: 2.5, md: 4 }, section: { xs: 9, md: 15 } }
 
-// Pretendard Variable 을 한글·영문 모두에 쓴다 (index.html 에서 CDN 으로 불러옴)
+// Pretendard Variable 을 한글·영문 모두에 쓴다 (npm pretendard 를 main.jsx 에서 가져와 번들에 포함. 외부 CDN 요청 없음)
 export const fontDisplay = [
   '"Pretendard Variable"',
   'Pretendard',

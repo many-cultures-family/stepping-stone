@@ -208,7 +208,7 @@ export default function SiteHeader() {
                     fontSize: 14,
                     fontWeight: on ? 700 : 500,
                     color: on ? ds.ink : ds.text2,
-                    bgcolor: on ? 'rgba(47,123,245,.08)' : 'transparent',
+                    bgcolor: on ? 'rgba(65,105,214,.08)' : 'transparent',
                     textDecoration: 'none',
                     transition: 'all .2s ease',
                     '&:hover': { color: ds.ink, bgcolor: 'rgba(17,20,24,.04)' },
