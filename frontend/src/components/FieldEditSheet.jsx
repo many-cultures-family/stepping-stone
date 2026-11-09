@@ -7,19 +7,22 @@ import {
   Drawer,
   IconButton,
   Stack,
-  Switch,
   TextField,
   Typography,
   useMediaQuery,
 } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 import { ds, radius, squircle } from '../theme.js'
+import { FORMATS } from '../mocks/fields.js'
 import { FIELD_ERROR_TEXT, validateField } from '../utils/validateFields.js'
 import { CloseIcon } from './icons.jsx'
 
 // 항목 하나 수정: 폰은 바텀시트, 노트북 이상은 가운데 창.
 // 부모가 key={field.id} 로 렌더해서 열 때마다 값이 새로 채워진다.
-export default function FieldEditSheet({ open, field, formats, onClose, onSave }) {
+// [목 모드 전용] 명세에 항목을 고치는 API와 입력 형식 목록 API(GET /api/input-formats)가 없다.
+// 형식 선택 목록은 목 데이터의 FORMATS 를 쓴다. 실서버 모드에서는 이 창을 열지 않는다.
+export default function FieldEditSheet({ open, field, onClose, onSave }) {
+  const formats = FORMATS
   const theme = useTheme()
   const desktop = useMediaQuery(theme.breakpoints.up('md'))
   const [draft, setDraft] = useState(() => ({ ...field, options: field?.options ?? [] }))
@@ -65,7 +68,7 @@ export default function FieldEditSheet({ open, field, formats, onClose, onSave }
 
           <Section
             title="필수로 써야 하나요?"
-            error={errors.includes('REQUIRED_EMPTY') && FIELD_ERROR_TEXT.REQUIRED_EMPTY}
+            error={errors.includes('REQUIRED_MISSING') && FIELD_ERROR_TEXT.REQUIRED_MISSING}
           >
             <Box
               role="radiogroup"
@@ -103,10 +106,7 @@ export default function FieldEditSheet({ open, field, formats, onClose, onSave }
 
           <Section
             title="어떤 형식으로 쓰나요?"
-            error={
-              (errors.includes('FORMAT_EMPTY') && FIELD_ERROR_TEXT.FORMAT_EMPTY) ||
-              (errors.includes('FORMAT_NOT_ALLOWED') && FIELD_ERROR_TEXT.FORMAT_NOT_ALLOWED)
-            }
+            error={errors.includes('FORMAT_CODE_INVALID') && FIELD_ERROR_TEXT.FORMAT_CODE_INVALID}
           >
             <Box role="radiogroup" aria-label="입력 형식" sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: '1fr 1fr 1fr' }, gap: 1 }}>
               {formats.map((fmt) => {
@@ -116,7 +116,7 @@ export default function FieldEditSheet({ open, field, formats, onClose, onSave }
                     key={fmt.code}
                     role="radio"
                     aria-checked={active}
-                    onClick={() => set({ format_code: fmt.code })}
+                    onClick={() => set({ format_code: fmt.code, format_label: fmt.label, format_example: fmt.example })}
                     sx={{
                       display: 'block',
                       textAlign: 'left',
@@ -176,19 +176,6 @@ export default function FieldEditSheet({ open, field, formats, onClose, onSave }
             </Section>
           )}
 
-          <Stack
-            component="label"
-            direction="row"
-            sx={{ alignItems: 'center', bgcolor: ds.card, ...squircle(16), p: 2.25, cursor: 'pointer' }}
-          >
-            <Box sx={{ flexGrow: 1, pr: 2 }}>
-              <Typography sx={{ fontSize: 16, fontWeight: 600 }}>원본과 달라요</Typography>
-              <Typography variant="body2" color="text.secondary">
-                표시하면 AI에게 이 칸을 다시 살펴보라고 요청할 수 있어요.
-              </Typography>
-            </Box>
-            <TossSwitch checked={Boolean(draft.flagged_wrong)} onChange={(e) => set({ flagged_wrong: e.target.checked })} />
-          </Stack>
         </Stack>
       </Box>
 
@@ -227,29 +214,5 @@ function Section({ title, error, children }) {
         </Typography>
       )}
     </Box>
-  )
-}
-
-function TossSwitch(props) {
-  return (
-    <Switch
-      {...props}
-      disableRipple
-      slotProps={{ input: { 'aria-label': '원본과 달라요' } }}
-      sx={{
-        width: 52,
-        height: 32,
-        p: 0,
-        flexShrink: 0,
-        '& .MuiSwitch-switchBase': {
-          p: '3px',
-          '&.Mui-checked': { transform: 'translateX(20px)', color: '#fff' },
-          '&.Mui-checked + .MuiSwitch-track': { bgcolor: ds.primary, opacity: 1 },
-          '&.Mui-focusVisible .MuiSwitch-thumb': { outline: `3px solid ${ds.primaryLine}` },
-        },
-        '& .MuiSwitch-thumb': { width: 26, height: 26, ...squircle(radius.full), boxShadow: '0 2px 4px rgba(0,0,0,0.15)', color: '#fff' },
-        '& .MuiSwitch-track': { ...squircle(radius.full), bgcolor: ds.lineStrong, opacity: 1 },
-      }}
-    />
   )
 }

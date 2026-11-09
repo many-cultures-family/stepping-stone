@@ -1,97 +1,105 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Box, Button, ButtonBase, CircularProgress, Collapse, Skeleton, Snackbar, Stack, Typography } from '@mui/material'
-import { confirmFields, getFields, requestReanalysis } from '../api/fields.js'
+import { Box, Button, ButtonBase, CircularProgress, Collapse, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Skeleton, Snackbar, Stack, Typography } from '@mui/material'
+import { USE_MOCK } from '../api/client.js'
+import { confirmFields, editField, inferFields, requestReanalysis } from '../api/fields.js'
+import { REANALYSIS_LIMIT } from '../api/limits.js'
+import { useAuth } from '../auth/useAuth.js'
 import DocumentPreview from '../components/DocumentPreview.jsx'
 import FieldEditSheet from '../components/FieldEditSheet.jsx'
 import FieldRow from '../components/FieldRow.jsx'
 import { CheckCircleIcon, ChevronIcon, SparkleIcon } from '../components/icons.jsx'
+import LoginRequired from '../components/LoginRequired.jsx'
 import PageHero from '../components/PageHero.jsx'
 import { Container, Pill } from '../components/ui.jsx'
 import { ds, radius, squircle } from '../theme.js'
-import { validateFields } from '../utils/validateFields.js'
+import { groupErrors } from '../utils/validateFields.js'
 
-// 설명 언어 (실제 지원 언어는 고객사 답변 대기 — backlog US-02 미확정)
-const LANGUAGES = [
-  { code: 'ko', label: '한국어' },
-  { code: 'vi', label: 'Tiếng Việt' },
-]
-
-// API 오류 코드 → 문구 (DESIGN.md "오류" 상태)
+// API 오류 코드 → 문구 (FIELD-CHECK-API.md 오류 코드, DESIGN.md "오류" 상태). 코드 → 문구는 이 표 한 곳에서만 고른다.
 const ERROR_TEXT = {
-  FIELD_INVALID: '확인이 필요한 항목이 있어요. 빨간 항목을 고쳐 주세요.',
-  REANALYSIS_LIMIT: '다시 분석은 3번까지만 할 수 있어요. 직접 고쳐 주세요.',
-  NO_FLAGGED_FIELD: "'원본과 달라요'로 표시한 항목이 없어요.",
+  LOGIN_REQUIRED: '로그인이 필요해요. 다시 로그인해 주세요.',
   FORBIDDEN_DRAFT: '이 문서를 볼 수 있는 권한이 없어요.',
   DRAFT_NOT_FOUND: '문서를 찾을 수 없어요.',
+  DRAFT_STEP_INVALID: '아직 이 단계가 아니에요. 문서를 먼저 올려 주세요.',
+  DRAFT_NOT_EDITABLE: '이 문서는 더 이상 고칠 수 없어요.',
+  FIELD_NOT_FOUND: '항목을 찾을 수 없어요. 화면을 새로 불러와 주세요.',
+  NO_FIELDS_FLAGGED: "'원본과 달라요'로 표시한 항목이 없어요.",
+  REANALYSIS_LIMIT_EXCEEDED: '다시 분석은 3번까지만 할 수 있어요.',
+  FIELDS_INVALID: '확인이 필요한 항목이 있어요. 빨간 항목을 확인해 주세요.',
+  LLM_CALL_FAILED: 'AI가 항목을 찾지 못했어요. 잠시 후 다시 시도해 주세요.',
   NETWORK_ERROR: '서버 연결 실패. 잠시 후 다시 시도해 주세요.',
 }
 const errorText = (e) => ERROR_TEXT[e?.code] ?? '문제가 생겼어요. 다시 시도해 주세요.'
+// 이 코드들은 화면을 그대로 두고 안내만 해 줘도 되는 것이 아니라 다음 단계로 갈 수 없는 상태다
+const BLOCKING_CODES = ['DRAFT_STEP_INVALID', 'DRAFT_NOT_EDITABLE']
 
-// F-02 입력 항목 확인·수정 (US-02 확정, US-03 원본과 다름·재분석)
+// F-02 입력 항목 확인 (US-02 확정, US-03 원본과 다름·재분석)
 // - LLM(L1)이 찾은 항목은 'AI가 찾은 항목'으로 표시하고, 사용자가 '확인했어요'를 눌러야만 확정된다
-// - 규칙 검증 오류가 1개라도 있으면 '확인했어요'를 막는다
+// - 오류 판정은 서버 응답의 errors 가 기준이다. errors 가 1개라도 있으면 '확인했어요'를 막는다
+// - '원본과 달라요' 표시는 재분석 요청 전까지는 화면 상태일 뿐 서버에 저장되지 않는다
+// - 재분석하면 서버가 전체 목록을 새 id 로 바꾼다. 사용자가 고친 값은 모두 사라진다
 export default function FieldCheckPage({ draftId, file, onDone, onReupload }) {
-  const [lang, setLang] = useState('ko')
+  const { status: authStatus, setLoggedOut } = useAuth()
   const [loadState, setLoadState] = useState({ status: 'loading', error: null })
   const [draft, setDraft] = useState(null)
-  const [formats, setFormats] = useState([])
   const [fields, setFields] = useState([])
+  const [serverErrors, setServerErrors] = useState([])
   const [selectedId, setSelectedId] = useState(null)
   const [editingId, setEditingId] = useState(null)
   const [busy, setBusy] = useState(null) // 'confirm' | 'reanalyze' | null
   const [toast, setToast] = useState(null)
   const [confirmed, setConfirmed] = useState(null)
   const [previewOpen, setPreviewOpen] = useState(true)
+  const [reanalyzeAsk, setReanalyzeAsk] = useState(false)
 
-  // 처음 불러오기와 '다시 시도'가 같이 쓴다. 언어를 바꿀 때는 changeLang 이 설명만 바꾼다 (사용자가 고친 값 유지)
+  const applyResponse = useCallback((data) => {
+    setDraft(data.draft)
+    setFields(data.fields)
+    setServerErrors(data.errors ?? [])
+  }, [])
+
+  // 처음 불러오기와 '다시 시도'가 같이 쓴다. 최초 추론은 항목이 이미 있으면 저장된 값을 돌려주는 멱등 호출이라 진입 때 불러도 안전하다
   const fetchFields = useCallback(
     (isCancelled = () => false) =>
-      getFields(draftId, 'ko')
+      inferFields(draftId)
         .then((data) => {
           if (isCancelled()) return
-          setDraft(data.draft)
-          setFormats(data.formats)
-          setFields(data.fields)
+          applyResponse(data)
           setLoadState({ status: 'ready', error: null })
         })
-        .catch((e) => !isCancelled() && setLoadState({ status: 'error', error: e })),
-    [draftId],
+        .catch((e) => {
+          if (isCancelled()) return
+          if (e?.code === 'LOGIN_REQUIRED') setLoggedOut()
+          setLoadState({ status: 'error', error: e })
+        }),
+    [draftId, applyResponse, setLoggedOut],
   )
 
   useEffect(() => {
+    if (authStatus !== 'authenticated') return
     let cancelled = false
     fetchFields(() => cancelled)
     return () => {
       cancelled = true
     }
-  }, [fetchFields])
+  }, [authStatus, fetchFields])
 
   function retry() {
-    setLang('ko')
     setLoadState({ status: 'loading', error: null })
     fetchFields()
   }
 
-  // 언어 바꾸기: 설명(description)만 새 언어로 바꾸고, 사용자가 고친 항목 값은 그대로 둔다
-  async function changeLang(next) {
-    if (next === lang) return
-    setLang(next)
-    try {
-      const data = await getFields(draftId, next)
-      const byId = Object.fromEntries(data.fields.map((f) => [f.id, f.description]))
-      setFields((prev) => prev.map((f) => ({ ...f, description: byId[f.id] ?? f.description })))
-    } catch (e) {
-      setToast(errorText(e))
-    }
+  // 401 은 머리 영역까지 로그아웃으로 맞춘다
+  function handleApiError(e) {
+    if (e?.code === 'LOGIN_REQUIRED') setLoggedOut()
+    setToast(errorText(e))
   }
 
-  const fieldErrors = useMemo(() => validateFields(fields, formats), [fields, formats])
+  const fieldErrors = useMemo(() => groupErrors(serverErrors), [serverErrors])
   const errorCount = Object.keys(fieldErrors).length
   const flaggedIds = fields.filter((f) => f.flagged_wrong).map((f) => f.id)
   const requiredCount = fields.filter((f) => f.required === true).length
   const optionalCount = fields.filter((f) => f.required === false).length
-  const formatByCode = useMemo(() => Object.fromEntries(formats.map((f) => [f.code, f])), [formats])
-  const reanalysisLeft = draft ? draft.reanalysis_limit - draft.reanalysis_count : 0
+  const reanalysisLeft = draft ? REANALYSIS_LIMIT - draft.reanalysis_count : 0
   const editingField = fields.find((f) => f.id === editingId)
 
   function select(id) {
@@ -105,8 +113,17 @@ export default function FieldCheckPage({ draftId, file, onDone, onReupload }) {
     document.querySelector(`[data-field-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 
+  function toggleFlag(id) {
+    setFields((prev) => prev.map((f) => (f.id === id ? { ...f, flagged_wrong: !f.flagged_wrong } : f)))
+  }
+
+  // [목 모드 전용] 수정 창 저장. 실서버에는 항목을 고치는 API가 없다
   function saveField(next) {
-    setFields((prev) => prev.map((f) => (f.id === next.id ? next : f)))
+    const flagged = new Set(flaggedIds)
+    const data = editField(draftId, next)
+    setDraft(data.draft)
+    setFields(data.fields.map((f) => ({ ...f, flagged_wrong: flagged.has(f.id) })))
+    setServerErrors(data.errors ?? [])
     setEditingId(null)
     setSelectedId(next.id)
   }
@@ -114,33 +131,44 @@ export default function FieldCheckPage({ draftId, file, onDone, onReupload }) {
   async function handleConfirm() {
     setBusy('confirm')
     try {
-      const res = await confirmFields(draftId, fields)
+      const res = await confirmFields(draftId)
+      setDraft(res.draft)
       setConfirmed(res)
       window.scrollTo({ top: 0 })
     } catch (e) {
-      setToast(errorText(e))
+      // 서버가 다시 검증해서 400 FIELDS_INVALID 와 errors 를 주면 그 errors 를 화면에 그린다
+      if (e?.code === 'FIELDS_INVALID' && e.errors) setServerErrors(e.errors)
+      handleApiError(e)
     } finally {
       setBusy(null)
     }
   }
 
   async function handleReanalyze() {
+    setReanalyzeAsk(false)
     setBusy('reanalyze')
     try {
-      const data = await requestReanalysis(draftId, flaggedIds, lang)
-      // '원본과 달라요'로 표시한 항목만 새 결과로 바꾸고, 사용자가 직접 고친 다른 항목은 그대로 둔다
-      const mine = Object.fromEntries(fields.filter((f) => !f.flagged_wrong).map((f) => [f.id, f]))
-      setDraft(data.draft)
-      setFormats(data.formats)
-      setFields(data.fields.map((f) => (mine[f.id] ? { ...mine[f.id], description: f.description } : f)))
+      const data = await requestReanalysis(draftId, flaggedIds)
+      // 응답이 전체 목록 교체이고 id 가 새로 발급된다. 이전 목록과 합치지 않는다
+      applyResponse(data)
       setSelectedId(null)
       window.scrollTo({ top: 0, behavior: 'smooth' })
       setToast('AI가 다시 살펴봤어요. 새 결과를 확인해 주세요.')
     } catch (e) {
-      setToast(errorText(e))
+      handleApiError(e)
     } finally {
       setBusy(null)
     }
+  }
+
+  if (authStatus === 'loading') return <LoadingView />
+
+  if (authStatus === 'anonymous') {
+    return (
+      <Container sx={{ py: 6 }}>
+        <LoginRequired />
+      </Container>
+    )
   }
 
   if (confirmed) {
@@ -150,6 +178,16 @@ export default function FieldCheckPage({ draftId, file, onDone, onReupload }) {
   if (loadState.status === 'loading') return <LoadingView />
 
   if (loadState.status === 'error') {
+    // 409: 재시도해도 소용없는 상태다. 업로드 화면으로 안내한다
+    if (BLOCKING_CODES.includes(loadState.error?.code)) {
+      return (
+        <EmptyState
+          title="지금은 항목을 확인할 수 없어요"
+          body={errorText(loadState.error)}
+          action={<Button variant="contained" size="large" onClick={onReupload}>문서 올리러 가기</Button>}
+        />
+      )
+    }
     return (
       <EmptyState
         title="항목을 불러오지 못했어요"
@@ -182,8 +220,7 @@ export default function FieldCheckPage({ draftId, file, onDone, onReupload }) {
           </Stack>
         }
         title={`입력할 칸 ${fields.length}개를 찾았어요`}
-        description="원본과 같은지 확인해 주세요. 다르면 바로 고칠 수 있어요."
-        aside={<LangToggle value={lang} onChange={changeLang} />}
+        description="원본과 같은지 확인해 주세요. 다르면 '원본과 달라요'를 눌러 AI에게 다시 살펴보게 할 수 있어요."
       >
         <Stack direction="row" spacing={1} sx={{ mt: 3, flexWrap: 'wrap', rowGap: 1 }}>
           <Stat label="필수" value={requiredCount} />
@@ -219,7 +256,6 @@ export default function FieldCheckPage({ draftId, file, onDone, onReupload }) {
             </Stack>
             <Collapse in={previewOpen}>
               <DocumentPreview
-                draftId={draftId}
                 file={file}
                 fields={fields}
                 selectedId={selectedId}
@@ -251,11 +287,12 @@ export default function FieldCheckPage({ draftId, file, onDone, onReupload }) {
                     key={f.id}
                     index={i}
                     field={f}
-                    format={formatByCode[f.format_code]}
                     errors={fieldErrors[f.id]}
                     selected={selectedId === f.id}
                     onSelect={select}
                     onEdit={setEditingId}
+                    onToggleFlag={toggleFlag}
+                    disabled={busy !== null}
                   />
                 ))}
               </Stack>
@@ -269,28 +306,45 @@ export default function FieldCheckPage({ draftId, file, onDone, onReupload }) {
               )}
             </Box>
 
+            <Typography variant="caption" sx={{ display: 'block', color: ds.text2, mt: 2 }}>
+              항목 설명은 사용하는 언어로 한 번 만들어져요. 언어를 바꾼 뒤에는 다시 분석해야 설명이 바뀌어요.
+            </Typography>
+
             <ActionCard
               errorCount={errorCount}
               flaggedCount={flaggedIds.length}
               reanalysisLeft={reanalysisLeft}
               busy={busy}
-              onReanalyze={handleReanalyze}
+              onReanalyze={() => setReanalyzeAsk(true)}
               onConfirm={handleConfirm}
             />
           </Box>
         </Box>
       </Container>
 
-      {editingField && (
+      {USE_MOCK && editingField && (
         <FieldEditSheet
           key={editingField.id}
           open
           field={editingField}
-          formats={formats}
           onClose={() => setEditingId(null)}
           onSave={saveField}
         />
       )}
+
+      <Dialog open={reanalyzeAsk} onClose={() => setReanalyzeAsk(false)} aria-labelledby="reanalyze-title">
+        <DialogTitle id="reanalyze-title">다시 분석할까요?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            AI가 항목 전체를 새로 찾아요. 지금 고친 내용과 '원본과 달라요' 표시는 모두 사라지고 새 항목으로 바뀌어요.
+            {Number.isFinite(reanalysisLeft) && ` (${reanalysisLeft}번 남음)`}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setReanalyzeAsk(false)}>취소</Button>
+          <Button variant="contained" onClick={handleReanalyze}>다시 분석하기</Button>
+        </DialogActions>
+      </Dialog>
 
       <Snackbar
         open={Boolean(toast)}
@@ -388,41 +442,6 @@ function Stat({ label, value, tone = 'white' }) {
       <Typography component="span" sx={{ fontSize: 16, fontWeight: 700, color: t.fg, fontFeatureSettings: '"tnum"' }}>
         {value}
       </Typography>
-    </Box>
-  )
-}
-
-function LangToggle({ value, onChange }) {
-  return (
-    <Box
-      role="radiogroup"
-      aria-label="설명 언어"
-      sx={{ display: 'inline-flex', p: 0.5, gap: 0.5, bgcolor: 'rgba(255,255,255,.7)', ...squircle(radius.full), alignSelf: { xs: 'flex-start', md: 'auto' }, flexShrink: 0 }}
-    >
-      {LANGUAGES.map((l) => {
-        const active = l.code === value
-        return (
-          <ButtonBase
-            key={l.code}
-            role="radio"
-            aria-checked={active}
-            onClick={() => onChange(l.code)}
-            sx={{
-              height: 38,
-              px: 2,
-              ...squircle(radius.full),
-              fontSize: 14,
-              fontWeight: 600,
-              whiteSpace: 'nowrap',
-              color: active ? ds.white : ds.text2,
-              bgcolor: active ? ds.ink : 'transparent',
-              transition: 'all .15s ease',
-            }}
-          >
-            {l.label}
-          </ButtonBase>
-        )
-      })}
     </Box>
   )
 }

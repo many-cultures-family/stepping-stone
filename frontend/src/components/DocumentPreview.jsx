@@ -1,26 +1,26 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { Box, Typography } from '@mui/material'
 import { USE_MOCK } from '../api/client.js'
-import { documentUrl } from '../api/fields.js'
 import { ds, radius, squircle } from '../theme.js'
 
 // 원본 미리보기 + 항목 칸 강조 (US-02 "항목을 누르면 원본의 해당 칸이 강조된다").
 // bbox 는 페이지 크기 대비 0~1 비율이라 이미지 크기와 상관없이 % 로 겹쳐 그린다.
+// 원본 파일 보기 API 는 아직 어느 문서에도 없다(FIELD-CHECK-API "아직 없는 항목"). 그래서 서버에서 원본을 가져오지 않는다:
+// 업로드 직후 메모리에 있는 file 이 있으면 그것을, 없으면 목 모드에서만 샘플 서식을, 실서버 모드에서는 안내 문구를 보여 준다.
 // PDF 는 새 의존성(pdf.js) 없이 브라우저 기본 뷰어로만 보여 주므로 칸 강조를 하지 않는다.
-export default function DocumentPreview({ draftId, file, fields, selectedId, onSelect, maxHeight }) {
+export default function DocumentPreview({ file, fields, selectedId, onSelect, maxHeight }) {
   const scrollRef = useRef(null)
   const pageRef = useRef(null)
   const boxRefs = useRef({})
-  const [imageFailed, setImageFailed] = useState(false)
 
   const fileUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file])
   useEffect(() => () => fileUrl && URL.revokeObjectURL(fileUrl), [fileUrl])
 
   const source = file
     ? { kind: file.type === 'application/pdf' ? 'pdf' : 'image', url: fileUrl }
-    : USE_MOCK || imageFailed
+    : USE_MOCK
       ? { kind: 'sample' }
-      : { kind: 'image', url: documentUrl(draftId) }
+      : { kind: 'none' }
 
   // 고른 칸이 미리보기 가운데 오도록 미리보기 안에서만 스크롤 (페이지 전체는 움직이지 않음)
   useEffect(() => {
@@ -45,7 +45,11 @@ export default function DocumentPreview({ draftId, file, fields, selectedId, onS
         overflowY: 'auto',
       }}
     >
-      {source.kind === 'pdf' ? (
+      {source.kind === 'none' ? (
+        <Typography role="status" sx={{ color: ds.text2, textAlign: 'center', py: 6 }}>
+          원본을 불러올 수 없어요. 원본 파일 보기 기능은 아직 준비 중이에요.
+        </Typography>
+      ) : source.kind === 'pdf' ? (
         <Box
           component="object"
           data={source.url}
@@ -65,7 +69,6 @@ export default function DocumentPreview({ draftId, file, fields, selectedId, onS
               component="img"
               src={source.url}
               alt="올린 원본 문서"
-              onError={() => setImageFailed(true)}
               sx={{ display: 'block', width: '100%' }}
             />
           )}
@@ -89,10 +92,10 @@ export default function DocumentPreview({ draftId, file, fields, selectedId, onS
                   ...squircle(6),
                   cursor: 'pointer',
                   transition: 'all .2s ease',
-                  bgcolor: selected ? 'rgba(49,130,246,0.18)' : 'transparent',
+                  bgcolor: selected ? 'rgba(65,105,214,0.18)' : 'transparent',
                   // 바깥 그림자는 스쿼클 대체(clip-path)에서 잘리므로 안쪽 테두리로
                   boxShadow: selected ? `inset 0 0 0 2px ${ds.primary}` : 'none',
-                  '&:hover': { bgcolor: selected ? 'rgba(49,130,246,0.18)' : 'rgba(49,130,246,0.08)' },
+                  '&:hover': { bgcolor: selected ? 'rgba(65,105,214,0.18)' : 'rgba(65,105,214,0.08)' },
                 }}
               />
             )

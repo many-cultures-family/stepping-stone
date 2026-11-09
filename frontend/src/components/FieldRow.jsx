@@ -1,12 +1,14 @@
-import { Box, Button, ButtonBase, Stack, Typography } from '@mui/material'
+import { Box, Button, ButtonBase, Stack, Switch, Typography } from '@mui/material'
+import { USE_MOCK } from '../api/client.js'
 import { ds, radius, squircle } from '../theme.js'
 import { FIELD_ERROR_TEXT } from '../utils/validateFields.js'
 import { AlertCircleIcon } from './icons.jsx'
 import { Pill } from './ui.jsx'
 
-// 입력 항목 카드: 누르면 원본 칸을 강조(onSelect)하고, 오른쪽 '수정'으로 수정 창을 연다.
+// 입력 항목 카드: 누르면 원본 칸을 강조(onSelect). '원본과 달라요' 표시는 카드 아래 스위치로 한다.
+// '수정' 버튼은 명세에 없는 기능이라 목 모드에서만 보인다.
 // 확인만 할 때는 아무것도 누르지 않아도 된다 (제로 클릭).
-export default function FieldRow({ field, format, errors = [], selected, onSelect, onEdit, index }) {
+export default function FieldRow({ field, errors = [], selected, onSelect, onEdit, onToggleFlag, index, disabled = false }) {
   const hasError = errors.length > 0
   const bg = hasError ? ds.redSoft : selected ? ds.white : ds.card
   const ring = selected ? `inset 0 0 0 2px ${hasError ? ds.red : ds.primary}` : 'none'
@@ -38,8 +40,9 @@ export default function FieldRow({ field, format, errors = [], selected, onSelec
           gap: 2,
           ...squircle(radius.card),
           px: { xs: 2.5, md: 3 },
-          py: 2.75,
-          pr: { xs: 11, md: 12 },
+          pt: 2.75,
+          pb: 1,
+          pr: { xs: USE_MOCK ? 11 : 2.5, md: USE_MOCK ? 12 : 3 },
           '&.Mui-focusVisible': { outline: `3px solid ${ds.primaryLine}` },
         }}
       >
@@ -71,16 +74,16 @@ export default function FieldRow({ field, format, errors = [], selected, onSelec
           </Stack>
 
           <Typography variant="body2" component="div" sx={{ color: ds.text2, mt: 0.75 }}>
-            {format ? (
+            {field.format_label ? (
               <>
                 <Box component="span" sx={{ fontWeight: 600, color: ds.ink }}>
-                  {format.label}
+                  {field.format_label}
                 </Box>
                 <Box component="span" sx={{ color: ds.muted, mx: 0.75 }}>
                   ·
                 </Box>
                 <Box component="span" sx={{ fontFeatureSettings: '"tnum"' }}>
-                  {format.example}
+                  {field.format_example}
                 </Box>
               </>
             ) : (
@@ -121,16 +124,35 @@ export default function FieldRow({ field, format, errors = [], selected, onSelec
         </Box>
       </ButtonBase>
 
-      <Button
-        size="small"
-        variant={hasError ? 'contained' : 'outlined'}
-        color={hasError ? 'error' : 'inherit'}
-        onClick={() => onEdit(field.id)}
-        aria-label={`${field.label} 수정`}
-        sx={{ position: 'absolute', top: 20, right: { xs: 16, md: 20 }, color: hasError ? 'white' : undefined }}
+      {USE_MOCK && (
+        <Button
+          size="small"
+          variant={hasError ? 'contained' : 'outlined'}
+          color={hasError ? 'error' : 'inherit'}
+          onClick={() => onEdit(field.id)}
+          aria-label={`${field.label} 수정`}
+          sx={{ position: 'absolute', top: 20, right: { xs: 16, md: 20 }, color: hasError ? 'white' : undefined }}
+        >
+          수정
+        </Button>
+      )}
+
+      <Stack
+        component="label"
+        direction="row"
+        sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 2, px: { xs: 2.5, md: 3 }, pb: 2, pt: 0.5, cursor: disabled ? 'default' : 'pointer' }}
       >
-        수정
-      </Button>
+        <Typography variant="body2" sx={{ color: field.flagged_wrong ? ds.orange : ds.text2, fontWeight: field.flagged_wrong ? 600 : 400 }}>
+          원본과 달라요
+        </Typography>
+        <Switch
+          size="small"
+          checked={Boolean(field.flagged_wrong)}
+          disabled={disabled}
+          onChange={() => onToggleFlag(field.id)}
+          slotProps={{ input: { 'aria-label': `${field.label} 원본과 달라요` } }}
+        />
+      </Stack>
     </Box>
   )
 }
