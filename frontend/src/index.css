@@ -4,3 +4,27 @@ body,
 #root {
   min-height: 100%;
 }
+
+body {
+  -webkit-font-smoothing: antialiased;
+  word-break: keep-all;
+}
+
+html {
+  scroll-behavior: smooth;
+  /* 상단 고정 메뉴에 앵커 제목이 가리지 않게 */
+  scroll-padding-top: 88px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* 스쿼클 반지름 (theme.js squircle()). 자식에게 상속되면 자식까지 잘리므로 inherits: false */
+@property --squircle-r {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
