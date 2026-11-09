@@ -6,10 +6,12 @@ export const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
 /** 서버 오류. code 는 docs/API.md 오류 코드 (예: FILE_TYPE_NOT_ALLOWED), 연결 실패는 NETWORK_ERROR */
 export class ApiError extends Error {
-  constructor(message, { status = null, code = null } = {}) {
+  constructor(message, { status = null, code = null, errors = null } = {}) {
     super(message)
     this.status = status
     this.code = code
+    // FIELDS_INVALID 등에서 함께 오는 [{ field_id, code }]
+    this.errors = errors
   }
 }
 
@@ -30,6 +32,7 @@ export async function request(path, { body, ...options } = {}) {
   if (!res.ok) {
     let message = `요청 실패 (${res.status})`
     let code = null
+    let errors = null
     try {
       const data = await res.json()
       if (typeof data.detail === 'string') {
@@ -39,6 +42,9 @@ export async function request(path, { body, ...options } = {}) {
         // API.md 오류 형식: { "detail": { "code": "..." } }
         code = data.detail.code
         message = code
+        if (Array.isArray(data.detail.errors)) errors = data.detail.errors
+      } else if (Array.isArray(data.errors)) {
+        errors = data.errors
       }
     } catch {
       // 본문이 JSON이 아니면 기본 메시지 사용
@@ -48,7 +54,7 @@ export async function request(path, { body, ...options } = {}) {
       code = 'NETWORK_ERROR'
       message = '서버 연결 실패'
     }
-    throw new ApiError(message, { status: res.status, code })
+    throw new ApiError(message, { status: res.status, code, errors })
   }
 
   return res.status === 204 ? null : res.json()
