@@ -8,6 +8,7 @@ import { Container } from './components/ui.jsx'
 import FieldCheckPage from './pages/FieldCheckPage.jsx'
 import LandingPage from './pages/LandingPage.jsx'
 import UploadPage from './pages/UploadPage.jsx'
+import WritePage from './pages/WritePage.jsx'
 import { getPendingFile, matchRoute, navigate, usePath } from './router.js'
 
 // LOGIN-API.md 항목 2 실패 응답: /?login_error=<코드>로 돌아온다.
@@ -17,7 +18,7 @@ const LOGIN_ERROR_MESSAGES = {
   GOOGLE_LOGIN_FAILED: '로그인 중 문제가 생겼어요. 다시 시도해 주세요.',
 }
 
-// /  랜딩 · /upload  서류 올리기(US-01) · /drafts/:id/fields  입력 항목 확인(F-02, US-02·US-03)
+// /  랜딩 · /upload  서류 올리기(US-01) · /drafts/:id/fields  입력 항목 확인(F-02, US-02·US-03) · /drafts/:id/write  가상 작성(F-04)
 function AppContent() {
   const route = matchRoute(usePath())
   const { status } = useAuth()
@@ -62,6 +63,7 @@ function AppContent() {
           onReupload={() => navigate('/upload')}
         />
       )}
+      {route.name === 'write' && <WritePage key={route.params.draftId} draftId={route.params.draftId} onDone={() => navigate('/')} />}
     </Layout>
   )
 }
