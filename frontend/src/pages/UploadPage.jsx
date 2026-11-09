@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Alert, Button, Paper, Stack, Typography } from '@mui/material'
 import { uploadDocument } from '../api/documents.js'
+import { useAuth } from '../auth/useAuth.js'
 
 // US-01 #1 범위: PDF·이미지 파일을 올리면 작성 건이 '업로드됨'으로 생긴다 (first-feature.md 2절 #1).
 // 인식(OCR)·개인정보 가림·결과 확인(#2~#4)은 오늘 범위가 아니다.
@@ -19,6 +20,7 @@ function errorMessage(e) {
 }
 
 export default function UploadPage() {
+  const { setLoggedOut } = useAuth()
   const [file, setFile] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -32,6 +34,12 @@ export default function UploadPage() {
       const { draft: created } = await uploadDocument(file)
       setDraft(created)
     } catch (e) {
+      // 다른 API와 같은 401 공통 처리: 별도 에러 화면 없이 머리 영역·화면을 비로그인 상태로 되돌린다
+      // (App.jsx가 status==='anonymous'일 때 LoginRequired를 보여준다. LOGIN-API.md "화면 약속").
+      if (e.code === 'LOGIN_REQUIRED') {
+        setLoggedOut()
+        return
+      }
       setError(errorMessage(e))
     } finally {
       setLoading(false)
