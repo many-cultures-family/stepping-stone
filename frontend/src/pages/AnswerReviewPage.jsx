@@ -15,8 +15,10 @@ const ERROR_TEXT = {
 const errorText = (code) => ERROR_TEXT[code] ?? '문제가 생겼어요. 다시 시도해 주세요.'
 
 // F-06 서술형 답변 검토 (US-05)
-// - 화면만 구현했다. F-06 API 명세가 아직 없어서 API 클라이언트·목데이터는 만들지 않았고,
-//   데이터와 동작은 모두 props 로 받는다. 명세가 나오면 App 에서 api 모듈을 연결한다.
+// - 데이터와 동작은 props 로 받는다. App.jsx 의 AnswerReviewRoute 가 hooks/useAnswerReview.js → api/review.js 로 연결한다.
+//   F-06 API 명세가 아직 없어서 api/review.js 의 경로·응답은 [제안]이고, VITE_USE_MOCK=true 에서는 mocks/review.js 가 응답한다.
+// - PageHero 의 단계 표시는 step={null} 로 숨긴다. Stepper 는 3단계(서류 올리기·입력 항목 확인·사전 정보 입력)뿐이라
+//   4번째를 가리킬 수 없고, 전체 단계 구성이 정해질 때까지 '○단계' 문구도 쓰지 않는다.
 // - 데이터 모양은 DATA-MODEL.md 를 따른다.
 //   answers:     [{ id(field_answer id), label(칸 제목), guide(안내 문구), value(사용자 답변) }]
 //   suggestions: [{ id, field_answer_id, kind(맞춤법·문법·질문 의도·보충), suggested_text, explanation, decision }]
@@ -60,14 +62,17 @@ export default function AnswerReviewPage({
   return (
     <>
       <PageHero
-        step={3}
-        overline="5단계 · 서술형 검토"
+        step={null}
+        overline="서술형 검토"
         title="쓴 답변을 AI와 함께 다듬어요"
         description="맞춤법·문법과 질문에 맞게 썼는지 AI가 살펴봐요. 제안은 자동으로 바뀌지 않아요. 하나씩 보고 반영할지 직접 골라 주세요."
       />
 
       <Container sx={{ py: { xs: 4, md: 6 } }}>
-        {answers.length === 0 ? (
+        {answers.length === 0 && reviewStatus === 'error' ? (
+          // 답변 목록을 불러오지 못한 경우. 서술형 칸이 없는 빈 화면과 구분한다.
+          <Alert severity="error">{errorText(errorCode)}</Alert>
+        ) : answers.length === 0 ? (
           <EmptyState onBack={onBack} />
         ) : (
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={{ xs: 3, md: 4 }} sx={{ alignItems: 'flex-start' }}>

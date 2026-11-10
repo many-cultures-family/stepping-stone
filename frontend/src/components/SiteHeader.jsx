@@ -134,6 +134,29 @@ function goSection(id) {
   window.history.replaceState(null, '', `#${id}`)
 }
 
+// 로그인했을 때만 보이는 '내 작성 목록' (F-08). 좁은 화면에서는 메뉴 시트에 있다
+function MyDraftsLink({ current, compact }) {
+  const { status } = useAuth()
+  if (status !== 'authenticated') return null
+  return (
+    <Button
+      component={Link}
+      to="/drafts"
+      aria-current={current ? 'page' : undefined}
+      sx={{
+        display: { xs: 'none', md: 'inline-flex' },
+        minHeight: compact ? 40 : 44,
+        px: 2,
+        whiteSpace: 'nowrap',
+        color: current ? ds.ink : ds.text2,
+        fontWeight: current ? 700 : 500,
+      }}
+    >
+      내 작성 목록
+    </Button>
+  )
+}
+
 // 스크롤 상태에 반응하는 헤더
 // - 맨 위: 투명, 전체 폭
 // - 스크롤 후: 가운데 떠 있는 반투명 스쿼클 바
@@ -222,6 +245,7 @@ export default function SiteHeader() {
           </Stack>
 
           <Stack direction="row" spacing={{ xs: 0.5, sm: 1 }} sx={{ alignItems: 'center' }}>
+            <MyDraftsLink current={path === '/drafts'} compact={scrolled} />
             <Button
               component={Link}
               to="/upload"
@@ -258,6 +282,7 @@ export default function SiteHeader() {
 }
 
 function MobileMenu({ open, active, onClose }) {
+  const { status: authStatus } = useAuth()
   // 닫힘 애니메이션·스크롤 잠금 해제가 끝난 뒤(onExited) 섹션으로 이동한다
   const pending = useRef(null)
   return (
@@ -318,11 +343,16 @@ function MobileMenu({ open, active, onClose }) {
           </Box>
         ))}
       </Stack>
-      <Box sx={{ px: 2.5, pt: 2 }}>
+      <Stack spacing={1} sx={{ px: 2.5, pt: 2 }}>
+        {authStatus === 'authenticated' && (
+          <Button fullWidth component={Link} to="/drafts" onClick={onClose} variant="outlined" size="large">
+            내 작성 목록
+          </Button>
+        )}
         <Button fullWidth component={Link} to="/upload" onClick={onClose} variant="contained" size="large">
           서류 올리기
         </Button>
-      </Box>
+      </Stack>
     </Drawer>
   )
 }

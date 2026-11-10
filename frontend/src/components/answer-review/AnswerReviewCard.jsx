@@ -1,5 +1,6 @@
 import { Box, Button, Stack, Typography } from '@mui/material'
 import { ds, radius, squircle } from '../../theme.js'
+import { CheckCircleIcon } from '../icons.jsx'
 import { Pill } from '../ui.jsx'
 import SuggestionCard from './SuggestionCard.jsx'
 
@@ -30,7 +31,13 @@ export default function AnswerReviewCard({ answer, suggestions, reviewed, onDeci
         </Typography>
         {reviewed && (pendingCount > 0
           ? <Pill tone="soft" size="sm">고를 제안 {pendingCount}개</Pill>
-          : <Pill tone="green" size="sm">{suggestions.length ? '모두 골랐어요' : '제안 없음'}</Pill>)}
+          : (
+            // 글자는 ink, 초록은 체크 아이콘에만 (초록 글자는 흰 바탕 대비 부족)
+            <Pill tone="green" size="sm" sx={{ color: ds.ink }}>
+              <Box component="span" aria-hidden sx={{ display: 'inline-flex', color: ds.green }}><CheckCircleIcon size={14} /></Box>
+              {suggestions.length ? '모두 골랐어요' : '제안 없음'}
+            </Pill>
+          ))}
       </Stack>
       {answer.guide && <Typography sx={{ color: ds.text2, mt: 1, wordBreak: 'keep-all' }}>{answer.guide}</Typography>}
 

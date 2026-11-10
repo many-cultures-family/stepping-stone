@@ -1,11 +1,32 @@
+import logging
+import os
+import secrets
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.middleware.sessions import SessionMiddleware
 
-from app import db, drafts
+from app import auth, db, drafts
+
+logger = logging.getLogger(__name__)
+
+# 로그인 세션 쿠키 (LOGIN-API.md 공통 규칙): didimdol_session, HttpOnly(기본), SameSite=Lax, 14일.
+# 로컬 http 시연이라 Secure는 끈다
+SESSION_COOKIE = "didimdol_session"
+SESSION_MAX_AGE = 14 * 24 * 60 * 60
+
+
+def get_session_secret():
+    secret = os.environ.get("SESSION_SECRET_KEY")
+    if not secret:
+        logger.warning(
+            "SESSION_SECRET_KEY가 없어 임시 키를 씁니다. 서버를 다시 켜면 다시 로그인해야 합니다"
+        )
+        secret = secrets.token_urlsafe(32)
+    return secret
 
 
 @asynccontextmanager
@@ -15,6 +36,16 @@ async def lifespan(app):
 
 
 app = FastAPI(title="디딤돌", lifespan=lifespan)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=get_session_secret(),
+    session_cookie=SESSION_COOKIE,
+    max_age=SESSION_MAX_AGE,
+    path="/",
+    same_site="lax",
+    https_only=False,
+)
+app.include_router(auth.router)
 app.include_router(drafts.router)
 
 

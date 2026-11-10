@@ -4,6 +4,10 @@ uvicorn==0.54.0
 python-multipart==0.0.33
 # PDF 쪽수 확인 (US-01)
 pypdf==6.21.4
+# Google 로그인(OAuth 2.0 / OpenID Connect). HTTP 호출은 위의 httpx2를 쓴다 (LOGIN-API.md)
+Authlib==1.9.5
+# Starlette SessionMiddleware 서명 쿠키 (LOGIN-API.md)
+itsdangerous==2.2.0
 ruff==0.17.3
 pytest==9.2.0
 httpx2==2.16.0

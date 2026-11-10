@@ -1,7 +1,12 @@
 import { Box, Button, Stack, Typography } from '@mui/material'
 import { ds, radius, squircle } from '../../theme.js'
-import { CheckCircleIcon } from '../icons.jsx'
+import { CheckCircleIcon, SparkleIcon } from '../icons.jsx'
 import { Pill } from '../ui.jsx'
+
+// 초록은 장식(아이콘)에만 쓴다. 글자색은 항상 ink.
+function GreenIcon({ children }) {
+  return <Box component="span" aria-hidden sx={{ display: 'inline-flex', color: ds.green }}>{children}</Box>
+}
 
 // 제안 종류 (DATA-MODEL.md review_suggestion.kind). 문구·색은 이 표 한 곳에서만 고른다.
 const KIND = {
@@ -39,13 +44,19 @@ export default function SuggestionCard({ suggestion, onDecide }) {
       }}
     >
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 1.5, flexWrap: 'wrap', rowGap: 1 }}>
-        <Pill tone={kind.tone} size="sm">{kind.title}</Pill>
+        <Pill tone={kind.tone} size="sm" sx={kind.tone === 'green' ? { color: ds.ink } : undefined}>
+          {kind.tone === 'green' && <GreenIcon><SparkleIcon size={12} /></GreenIcon>}
+          {kind.title}
+        </Pill>
         <Pill tone="white" size="sm" sx={{ border: `1px solid ${ds.line}` }}>AI 제안</Pill>
         <Box sx={{ flexGrow: 1 }} />
         {!pending && (
-          <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', color: suggestion.decision === '반영' ? ds.green : ds.muted }}>
-            <CheckCircleIcon size={16} />
-            <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
+          // 글자는 ink(대비 충분), 초록은 아이콘에만 쓴다. 흰 바탕에서 초록 글자는 3.4:1 이라 기준(4.5:1)에 못 미친다.
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+            <Box component="span" sx={{ display: 'inline-flex', color: suggestion.decision === '반영' ? ds.green : ds.muted }}>
+              <CheckCircleIcon size={16} />
+            </Box>
+            <Typography sx={{ fontSize: 13, fontWeight: 600, color: ds.ink }}>
               {suggestion.decision === '반영' ? labels.반영 : labels.무시}
             </Typography>
           </Stack>
