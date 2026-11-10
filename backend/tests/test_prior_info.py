@@ -107,6 +107,27 @@ def test_put_prior_info_rejects_unknown_info_key(client):
     assert res.json() == {"detail": {"code": "INFO_KEY_INVALID"}}
 
 
+# 실패·거절: 값이 문자열이 아니면 500 대신 400으로 거절한다 (팀 리뷰 — 숫자·리스트가 오면
+# compute_prior_info_errors의 .strip()에서 AttributeError로 500이 나던 문제)
+def test_put_prior_info_rejects_non_string_value(client, db, seed_user_id):
+    res = put_prior_info(client, {"phone": 1234})
+
+    assert res.status_code == 400
+    assert res.json() == {"detail": {"code": "VALUE_NOT_STRING"}}
+    row = db.execute(
+        "SELECT value FROM prior_info WHERE user_id = ? AND info_key = 'phone'",
+        (seed_user_id,),
+    ).fetchone()
+    assert crypto.decrypt_value(row["value"]) == "010-0000-1234"  # 시드 값 그대로
+
+
+def test_put_prior_info_rejects_list_value(client):
+    res = put_prior_info(client, {"address": ["서울", "중구"]})
+
+    assert res.status_code == 400
+    assert res.json() == {"detail": {"code": "VALUE_NOT_STRING"}}
+
+
 # 실패·거절: 본문이 비어 있으면 거절한다
 def test_put_prior_info_rejects_empty_values(client):
     res = put_prior_info(client, {})

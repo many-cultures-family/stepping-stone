@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from app import auth, db, llm
+from app import auth, db, llm, prior_info
 
 router = APIRouter(prefix="/api")
 
@@ -61,6 +61,24 @@ def _fetch_suggestions(conn, field_answer_ids):
     return [dict(row) for row in rows]
 
 
+def _mask_known_prior_info(text, prior_info_values):
+    """L3(Gemini)에 보내기 전, 이 사용자가 이미 저장해 둔 사전 정보(이름·생년월일·연락처·
+    주소)와 정확히 일치하는 부분을 가린다 (팀 리뷰 — 답변 원문이 마스킹 없이 L3로 전송되던
+    문제). L1의 masked_text는 OCR 단계에서 일반 PII를 탐지해 가리지만, 그 마스킹 로직은
+    이 저장소에 없다(다른 서비스가 문서를 가린 뒤 masked_text로 넘겨준다). 대신 L3는 이미
+    로그인한 사용자 본인의 저장된 사전 정보 값을 알고 있으므로, 그 값과 정확히 일치하는
+    문자열만 치환한다. 사전 정보에 없는 값(예: 제3자 이름, 저장 안 한 다른 연락처)은
+    가리지 못하는 알려진 한계가 있다."""
+    masked = text
+    # 긴 값부터 바꿔서 짧은 값이 긴 값의 일부를 먼저 지워버리는 일이 없게 한다
+    for info_key, value in sorted(
+        prior_info_values.items(), key=lambda item: len(item[1] or ""), reverse=True
+    ):
+        if value and value.strip():
+            masked = masked.replace(value, f"[{info_key}]")
+    return masked
+
+
 def _insert_suggestions(conn, suggestions):
     for item in suggestions:
         conn.execute(
@@ -103,6 +121,7 @@ def request_review(draft_id: int, user: Annotated[dict, Depends(auth.current_use
             # 이미 검토한 적 있으면 L3을 다시 부르지 않는다 (fields:infer와 같은 멱등성)
             return {"suggestions": existing}
 
+        prior_info_values = prior_info.fetch_prior_info_values(conn, user["id"])
         try:
             llm_suggestions = llm.review_answers(
                 answers=[
@@ -110,7 +129,9 @@ def request_review(draft_id: int, user: Annotated[dict, Depends(auth.current_use
                         "field_answer_id": row["field_answer_id"],
                         "label": row["label"],
                         "guide_text": row["guide_text"] or row["description"],
-                        "value": row["value"],
+                        "value": _mask_known_prior_info(
+                            row["value"], prior_info_values
+                        ),
                     }
                     for row in rows
                 ],

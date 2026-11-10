@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app import auth, crypto, db, llm
+from app import auth, db, llm, prior_info
 
 router = APIRouter(prefix="/api")
 
@@ -72,18 +72,11 @@ def compute_errors(fields, allowed_format_codes):
     return errors
 
 
-def _fetch_prior_info_values(conn, user_id):
-    rows = conn.execute(
-        "SELECT info_key, value FROM prior_info WHERE user_id = ?", (user_id,)
-    ).fetchall()
-    return {row["info_key"]: crypto.decrypt_value(row["value"]) for row in rows}
-
-
 def _fetch_fields(conn, draft_id, user_id):
     input_formats = {
         row["code"]: row for row in conn.execute("SELECT * FROM input_format")
     }
-    prior_info_values = _fetch_prior_info_values(conn, user_id)
+    prior_info_values = prior_info.fetch_prior_info_values(conn, user_id)
     rows = conn.execute(
         "SELECT * FROM form_field WHERE draft_id = ? ORDER BY id", (draft_id,)
     ).fetchall()

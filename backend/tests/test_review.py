@@ -118,6 +118,33 @@ def test_request_review_calls_llm_and_stores_suggestions(
     assert row == 1
 
 
+# 개인정보 보호(팀 리뷰): 답변에 사용자가 저장해 둔 사전 정보가 섞여 있으면
+# L3에 보내기 전에 가린다 (원문이 그대로 Gemini로 전송되던 문제)
+def test_request_review_masks_known_prior_info_before_calling_llm(
+    client, db, seed_user_id, monkeypatch
+):
+    # 시드 사전 정보(conftest SEED_PRIOR_INFO)의 phone 값
+    draft_id, answer_id = _draft_with_long_text_answer(
+        db, seed_user_id, value="연락처는 010-0000-1234입니다."
+    )
+    captured = {}
+
+    def fake_review_answers(answers, language):
+        captured["answers"] = answers
+        return []
+
+    monkeypatch.setattr(llm, "review_answers", fake_review_answers)
+
+    request_review(client, draft_id)
+
+    assert captured["answers"][0]["value"] == "연락처는 [phone]입니다."
+    # DB에 저장된 원문 답변은 그대로 유지된다 (마스킹은 L3 전송용 사본에만 적용)
+    row = db.execute(
+        "SELECT value FROM field_answer WHERE id = ?", (answer_id,)
+    ).fetchone()
+    assert row["value"] == "연락처는 010-0000-1234입니다."
+
+
 # 정상: 서술형 항목이 없으면 L3을 부르지 않고 빈 목록을 돌려준다
 def test_request_review_skips_llm_when_no_long_text_fields(
     client, db, seed_user_id, monkeypatch

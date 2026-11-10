@@ -42,6 +42,15 @@ def _fetch_prior_info(conn, user_id):
     return {row["info_key"]: row for row in rows}
 
 
+def fetch_prior_info_values(conn, user_id):
+    """{info_key: 복호화된 값} — fields.py(자동 입력)·review.py(검토 전 마스킹)가 함께 쓴다.
+    단일 출처로 여기 하나만 둔다 (F-02 리뷰와 같은 이유로 중복 상수·쿼리를 두지 않음)."""
+    return {
+        info_key: crypto.decrypt_value(row["value"])
+        for info_key, row in _fetch_prior_info(conn, user_id).items()
+    }
+
+
 def _prior_info_response(conn, user_id):
     saved = _fetch_prior_info(conn, user_id)
     result = {}
@@ -94,6 +103,10 @@ async def update_prior_info(
         raise HTTPException(status_code=400, detail={"code": "VALUES_REQUIRED"})
     if not set(values) <= set(INFO_KEY_FORMAT_CODE):
         raise HTTPException(status_code=400, detail={"code": "INFO_KEY_INVALID"})
+    # 숫자·리스트 등 문자열이 아닌 값이 오면 아래 compute_prior_info_errors의 .strip()에서
+    # 500이 난다 (팀 리뷰 지적) — 그 전에 같은 층(VALUES_REQUIRED·INFO_KEY_INVALID)에서 막는다
+    if not all(isinstance(value, str) for value in values.values()):
+        raise HTTPException(status_code=400, detail={"code": "VALUE_NOT_STRING"})
 
     conn = db.connect()
     try:
