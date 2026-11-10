@@ -253,3 +253,27 @@ def test_us03_infer_rejects_non_integer_flagged_field_ids(client, db, seed_user_
 
     assert res.status_code == 400
     assert res.json() == {"detail": {"code": "INVALID_FLAGGED_FIELD_IDS"}}
+
+
+# 권한: 다른 사용자의 작성 건은 추론·재분석할 수 없다
+def test_us03_infer_forbidden_for_other_users_draft(client, db):
+    other_user_id = db.execute(
+        "INSERT INTO user (google_sub, email, language) VALUES (?, ?, ?)",
+        ("other-sub-0001", "other@example.com", "ko"),
+    ).lastrowid
+    db.commit()
+    draft_id = insert_draft(db, other_user_id, "수정", "field_check")
+
+    res = infer(client, draft_id)
+
+    assert res.status_code == 403
+    assert res.json() == {"detail": {"code": "FORBIDDEN_DRAFT"}}
+
+
+def test_us03_infer_without_login_is_401(anon_client, db, seed_user_id):
+    draft_id = insert_draft(db, seed_user_id, "수정", "field_check")
+
+    res = infer(anon_client, draft_id)
+
+    assert res.status_code == 401
+    assert res.json() == {"detail": {"code": "LOGIN_REQUIRED"}}
