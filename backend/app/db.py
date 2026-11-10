@@ -10,6 +10,27 @@ SEED_GOOGLE_SUB = "test-sub-0001"
 SEED_EMAIL = "tester@example.com"
 SEED_LANGUAGE = "vi"
 
+# input_format = R2 허용 목록의 단일 출처. DATA-MODEL.md의 9종을 모두 채운다
+# (F-02 리뷰 — 허용 목록을 코드 상수와 DB에 각각 두면 어긋난다. 이 테이블이 유일한 출처다)
+SEED_INPUT_FORMATS = [
+    ("phone", "전화번호", r"^010-\d{4}-\d{4}$", "010-0000-0000"),
+    ("date", "날짜", r"^\d{4}\.\d{2}\.\d{2}$", "YYYY.MM.DD"),
+    ("email", "이메일", r"^[^@\s]+@[^@\s]+\.[^@\s]+$", "example@email.com"),
+    ("number", "숫자", r"^\d+$", "123"),
+    ("name", "이름", r"^.{1,50}$", "홍길동"),
+    ("address", "주소", r"^.{1,200}$", "○○시 ○○구 ○○로 00"),
+    ("short_text", "짧은 글", r"^.{1,100}$", "간단히 입력"),
+    ("long_text", "서술형", None, "자유롭게 작성"),
+    ("choice", "선택형", None, "보기 중 선택"),
+]
+
+# 시드 사용자의 사전 정보 (DATA-MODEL.md 시드 데이터 2번, 가짜 값)
+SEED_PRIOR_INFO = [
+    ("name", "name", "테스트 사용자"),
+    ("birth_date", "date", "1990.01.01"),
+    ("phone", "phone", "010-0000-1234"),
+]
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS user (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,6 +58,40 @@ CREATE TABLE IF NOT EXISTS document (
     page_count INTEGER NOT NULL,
     empty_pages TEXT
 );
+CREATE TABLE IF NOT EXISTS input_format (
+    code TEXT PRIMARY KEY,
+    label TEXT NOT NULL,
+    pattern TEXT,
+    example TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS prior_info (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES user(id),
+    info_key TEXT NOT NULL,
+    format_code TEXT NOT NULL REFERENCES input_format(code),
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (user_id, info_key)
+);
+CREATE TABLE IF NOT EXISTS form_field (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    draft_id INTEGER NOT NULL REFERENCES draft(id),
+    label TEXT NOT NULL,
+    format_code TEXT,
+    required INTEGER,
+    prior_info_key TEXT,
+    description TEXT NOT NULL,
+    guide_text TEXT,
+    options TEXT,
+    bbox TEXT NOT NULL,
+    flagged_wrong INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS field_answer (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    form_field_id INTEGER NOT NULL UNIQUE REFERENCES form_field(id),
+    value TEXT,
+    mismatch_acknowledged INTEGER NOT NULL DEFAULT 0
+);
 """
 
 
@@ -60,6 +115,29 @@ def init_db():
             "INSERT OR IGNORE INTO user (google_sub, email, language) VALUES (?, ?, ?)",
             (SEED_GOOGLE_SUB, SEED_EMAIL, SEED_LANGUAGE),
         )
+        conn.executemany(
+            "INSERT OR IGNORE INTO input_format (code, label, pattern, example) "
+            "VALUES (?, ?, ?, ?)",
+            SEED_INPUT_FORMATS,
+        )
+        # get_seed_user_id는 로그인(PR #17)이 들어오며 지워졌다. 시드 사용자 id는
+        # 여기서만 필요하므로 바로 조회한다
+        seed_user = conn.execute(
+            "SELECT id FROM user WHERE google_sub = ?", (SEED_GOOGLE_SUB,)
+        ).fetchone()
+        conn.executemany(
+            "INSERT OR IGNORE INTO prior_info (user_id, info_key, format_code, value) "
+            "VALUES (?, ?, ?, ?)",
+            [(seed_user["id"], key, fmt, value) for key, fmt, value in SEED_PRIOR_INFO],
+        )
         conn.commit()
     finally:
         conn.close()
+
+
+def to_iso_z(value):
+    # SQLite CURRENT_TIMESTAMP는 "YYYY-MM-DD HH:MM:SS"(UTC, 표기 없음)로 저장된다.
+    # 응답에서는 ISO 8601 + Z로 바꾼다 (API 문서 공통 규칙)
+    if value is None:
+        return None
+    return value.replace(" ", "T") + "Z"
