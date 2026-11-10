@@ -1,5 +1,5 @@
 import { Box, Stack, Typography } from '@mui/material'
-import { ds, radius, squircle } from '../../theme.js'
+import { ds, squircle } from '../../theme.js'
 import { GlobeIcon } from '../icons.jsx'
 import { Container } from '../ui.jsx'
 
@@ -20,7 +20,8 @@ export default function LanguageStrip() {
             alignSelf: { xs: 'flex-start', md: 'auto' },
             px: 2.5,
             height: 52,
-            ...squircle(radius.full),
+            // 끝까지 곡선(radius.full)이면 좌우 끝 1px 테두리가 얇아져 희미해진다. 곧은 구간을 남긴다.
+            ...squircle(20),
             border: `1px solid ${ds.line}`,
             flexShrink: 0,
           }}
