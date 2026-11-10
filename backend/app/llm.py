@@ -57,6 +57,25 @@ RESPONSE_SCHEMA = {
 }
 
 
+# 서술형 답변 검토(L3, F-06)가 낼 수 있는 제안 종류. frontend/src/mocks/review.js의
+# DATA-MODEL.md review_suggestion.kind 주석과 같다
+REVIEW_KINDS = ["맞춤법", "문법", "질문 의도", "보충"]
+
+REVIEW_RESPONSE_SCHEMA = {
+    "type": "ARRAY",
+    "items": {
+        "type": "OBJECT",
+        "properties": {
+            "field_answer_id": {"type": "INTEGER"},
+            "kind": {"type": "STRING", "enum": REVIEW_KINDS},
+            "suggested_text": {"type": "STRING", "nullable": True},
+            "explanation": {"type": "STRING"},
+        },
+        "required": ["field_answer_id", "kind", "explanation"],
+    },
+}
+
+
 class LLMCallError(Exception):
     """L1 호출 실패(설정 누락·타임아웃·오류 응답·형식이 다른 응답). 재시도는 하지 않는다
     (FIELD-CHECK-API.md "L1 호출 실패 응답" [제안] — 호출부가 502 LLM_CALL_FAILED로 바꾼다)"""
@@ -145,7 +164,91 @@ def _build_prompt(masked_text, language, existing_fields, flagged_field_ids):
     return "\n\n".join(parts)
 
 
-def _call_gemini(prompt):
+def review_answers(answers, language):
+    """L3을 호출해 서술형 답변의 맞춤법·문법과 질문 의도 대비 적합성을 검토한다 (F-06, US-05).
+
+    보내는 것: answers = [{"field_answer_id", "label", "guide_text", "value"}, ...]
+    (field_answer id, 항목명, 질문 안내문, 사용자가 쓴 답변). 호출부가 보내기 전에
+    답변 속 개인정보를 가리는 일은 L1의 masked_text와 마찬가지로 이 함수 밖의 책임이다.
+
+    반환: [{"field_answer_id", "kind", "suggested_text", "explanation"}, ...]
+    L1과 같은 이유로 L1 출력을 신뢰하지 않는다 — kind가 허용 목록 밖이거나
+    field_answer_id가 보낸 답변에 없는 제안은 거절한다 (존재하지 않는 답변을 가리켜
+    화면이 엉뚱한 곳에 제안을 붙이는 일을 막는다).
+    """
+    if not answers:
+        return []
+    known_ids = {a["field_answer_id"] for a in answers}
+    prompt = _build_review_prompt(answers, language)
+    response_text = _call_gemini(prompt, response_schema=REVIEW_RESPONSE_SCHEMA)
+    try:
+        suggestions = json.loads(response_text)
+    except ValueError as exc:
+        raise LLMCallError(f"L3 응답이 JSON이 아님: {exc}") from exc
+    if not isinstance(suggestions, list):
+        raise LLMCallError("L3 응답이 배열이 아님")
+    for item in suggestions:
+        _validate_suggestion_shape(item, known_ids)
+    return suggestions
+
+
+def _validate_suggestion_shape(item, known_ids):
+    if not isinstance(item, dict):
+        raise LLMCallError(f"L3 항목이 객체가 아님: {item!r}")
+    field_answer_id = item.get("field_answer_id")
+    if not isinstance(field_answer_id, int) or field_answer_id not in known_ids:
+        raise LLMCallError(
+            f"L3 항목의 field_answer_id가 올바르지 않음: {field_answer_id!r}"
+        )
+    if item.get("kind") not in REVIEW_KINDS:
+        raise LLMCallError(f"L3 항목의 kind가 허용 목록 밖임: {item.get('kind')!r}")
+    suggested_text = item.get("suggested_text")
+    if suggested_text is not None and not isinstance(suggested_text, str):
+        raise LLMCallError(
+            f"L3 항목의 suggested_text가 문자열이 아님: {suggested_text!r}"
+        )
+    explanation = item.get("explanation")
+    if not isinstance(explanation, str) or not explanation.strip():
+        raise LLMCallError(f"L3 항목의 explanation이 비어 있음: {explanation!r}")
+
+
+def _build_review_prompt(answers, language):
+    kinds = "/".join(REVIEW_KINDS)
+    parts = [
+        (
+            "다음은 신청서 서술형 입력 항목에 사용자가 쓴 답변 목록이다. "
+            "각 답변의 맞춤법·문법을 검토하고, 질문 의도에 비해 답변이 부족하거나 "
+            "어긋나는 곳이 있으면 짚어라. 고칠 곳이 없으면 그 답변은 건너뛴다."
+        ),
+        (
+            f"제안 종류(kind)는 다음 중 하나다: {kinds}. "
+            "맞춤법·문법은 틀린 부분을 고친 전체 문장을 suggested_text에 담고, "
+            "질문 의도·보충은 suggested_text를 null로 두고 explanation에만 설명한다."
+        ),
+        (
+            "응답은 각 제안이 다음 키를 가진 JSON 배열로만 답하라: "
+            "field_answer_id(아래 id 중 하나), kind, suggested_text(없으면 null), "
+            f"explanation({language} 언어로 쓴 사용자용 설명)."
+        ),
+        f"사용 언어 코드: {language}",
+        "답변 목록:\n"
+        + json.dumps(
+            [
+                {
+                    "field_answer_id": a["field_answer_id"],
+                    "label": a.get("label"),
+                    "guide_text": a.get("guide_text"),
+                    "value": a["value"],
+                }
+                for a in answers
+            ],
+            ensure_ascii=False,
+        ),
+    ]
+    return "\n\n".join(parts)
+
+
+def _call_gemini(prompt, response_schema=RESPONSE_SCHEMA):
     api_key = os.environ.get("GEMINI_API_KEY")
     model = os.environ.get("GEMINI_MODEL")
     if not api_key or not model:
@@ -157,7 +260,7 @@ def _call_gemini(prompt):
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
                 "responseMimeType": "application/json",
-                "responseSchema": RESPONSE_SCHEMA,
+                "responseSchema": response_schema,
             },
         }
     ).encode("utf-8")

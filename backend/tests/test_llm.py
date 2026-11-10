@@ -136,3 +136,94 @@ def test_llm_call_gemini_requests_json_response_format(monkeypatch):
         captured["body"]["generationConfig"]["responseMimeType"] == "application/json"
     )
     assert "responseSchema" in captured["body"]["generationConfig"]
+
+
+# F-06: 서술형 답변 검토(L3) 단위 테스트. 실제 Gemini를 부르지 않는다
+def test_review_answers_returns_empty_without_calling_llm_when_no_answers(monkeypatch):
+    def fail_if_called(prompt, response_schema=None):
+        raise AssertionError("답변이 없으면 L3을 부르면 안 된다")
+
+    monkeypatch.setattr(llm, "_call_gemini", fail_if_called)
+
+    assert llm.review_answers([], language="vi") == []
+
+
+def test_review_answers_returns_parsed_list(monkeypatch):
+    answers = [{"field_answer_id": 101, "label": "신청 사유", "value": "답변"}]
+    fake_suggestions = [
+        {
+            "field_answer_id": 101,
+            "kind": "맞춤법",
+            "suggested_text": "고친 답변",
+            "explanation": "설명",
+        }
+    ]
+    monkeypatch.setattr(
+        llm,
+        "_call_gemini",
+        lambda prompt, response_schema=None: json.dumps(fake_suggestions),
+    )
+
+    result = llm.review_answers(answers, language="vi")
+
+    assert result == fake_suggestions
+
+
+def test_review_answers_rejects_unknown_field_answer_id(monkeypatch):
+    answers = [{"field_answer_id": 101, "label": "신청 사유", "value": "답변"}]
+    fake_suggestions = [
+        {
+            "field_answer_id": 999,  # 보내지 않은 id
+            "kind": "맞춤법",
+            "suggested_text": "고친 답변",
+            "explanation": "설명",
+        }
+    ]
+    monkeypatch.setattr(
+        llm,
+        "_call_gemini",
+        lambda prompt, response_schema=None: json.dumps(fake_suggestions),
+    )
+
+    with pytest.raises(llm.LLMCallError):
+        llm.review_answers(answers, language="vi")
+
+
+def test_review_answers_rejects_kind_not_in_allowed_list(monkeypatch):
+    answers = [{"field_answer_id": 101, "label": "신청 사유", "value": "답변"}]
+    fake_suggestions = [
+        {
+            "field_answer_id": 101,
+            "kind": "오타",  # 허용 목록 밖
+            "suggested_text": None,
+            "explanation": "설명",
+        }
+    ]
+    monkeypatch.setattr(
+        llm,
+        "_call_gemini",
+        lambda prompt, response_schema=None: json.dumps(fake_suggestions),
+    )
+
+    with pytest.raises(llm.LLMCallError):
+        llm.review_answers(answers, language="vi")
+
+
+def test_review_answers_rejects_empty_explanation(monkeypatch):
+    answers = [{"field_answer_id": 101, "label": "신청 사유", "value": "답변"}]
+    fake_suggestions = [
+        {
+            "field_answer_id": 101,
+            "kind": "질문 의도",
+            "suggested_text": None,
+            "explanation": "",
+        }
+    ]
+    monkeypatch.setattr(
+        llm,
+        "_call_gemini",
+        lambda prompt, response_schema=None: json.dumps(fake_suggestions),
+    )
+
+    with pytest.raises(llm.LLMCallError):
+        llm.review_answers(answers, language="vi")

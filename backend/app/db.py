@@ -3,6 +3,8 @@ import os
 import sqlite3
 from pathlib import Path
 
+from app import crypto
+
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 # 테스트·시연용 시드 사용자 (DATA-MODEL 시드 2번, 가짜 값). 테스트는 이 google_sub로 로그인한다
@@ -92,6 +94,14 @@ CREATE TABLE IF NOT EXISTS field_answer (
     value TEXT,
     mismatch_acknowledged INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS review_suggestion (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    field_answer_id INTEGER NOT NULL REFERENCES field_answer(id),
+    kind TEXT NOT NULL,
+    suggested_text TEXT,
+    explanation TEXT NOT NULL,
+    decision TEXT NOT NULL DEFAULT '미결정'
+);
 """
 
 
@@ -128,7 +138,10 @@ def init_db():
         conn.executemany(
             "INSERT OR IGNORE INTO prior_info (user_id, info_key, format_code, value) "
             "VALUES (?, ?, ?, ?)",
-            [(seed_user["id"], key, fmt, value) for key, fmt, value in SEED_PRIOR_INFO],
+            [
+                (seed_user["id"], key, fmt, crypto.encrypt_value(value))
+                for key, fmt, value in SEED_PRIOR_INFO
+            ],
         )
         conn.commit()
     finally:
