@@ -81,5 +81,28 @@ def upload_dir(anon_client, tmp_path):
     return tmp_path / "uploads"
 
 
+@pytest.fixture
+def seed_user_id(db):
+    from app.db import SEED_GOOGLE_SUB
+
+    row = db.execute(
+        "SELECT id FROM user WHERE google_sub = ?", (SEED_GOOGLE_SUB,)
+    ).fetchone()
+    return row["id"]
+
+
 def count_rows(conn, table):
     return conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+
+
+def insert_draft(conn, user_id, status, step, **fields):
+    # F-02·F-08 테스트에서 업로드·추론 흐름 없이 바로 원하는 상태의 작성 건을 만든다
+    columns = ["user_id", "status", "step", *fields.keys()]
+    placeholders = ", ".join("?" for _ in columns)
+    values = [user_id, status, step, *fields.values()]
+    cur = conn.execute(
+        f"INSERT INTO draft ({', '.join(columns)}) VALUES ({placeholders})",
+        values,
+    )
+    conn.commit()
+    return cur.lastrowid
