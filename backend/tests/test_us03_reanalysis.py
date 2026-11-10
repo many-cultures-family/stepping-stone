@@ -1,0 +1,147 @@
+# US-03: 추론 결과 재분석 요청 (FIELD-CHECK-API.md 항목 2)
+from conftest import insert_document, insert_draft, insert_form_field
+
+from app import llm
+
+INFER_PATH = "/api/drafts/{}/fields:infer"
+
+FAKE_L1_FIELDS = [
+    {
+        "label": "보호자 연락처",
+        "format_code": "phone",
+        "required": True,
+        "prior_info_key": "phone",
+        "description": "보호자 전화번호를 적습니다",
+        "bbox": {"page": 1, "x": 0.1, "y": 0.3, "w": 0.4, "h": 0.04},
+    }
+]
+
+
+def infer(client, draft_id, body=None):
+    if body is None:
+        return client.post(INFER_PATH.format(draft_id))
+    return client.post(INFER_PATH.format(draft_id), json=body)
+
+
+# US-02 #2 (정상): 처음 호출이면 L1을 불러 항목을 추론한다
+def test_us03_infer_calls_l1_on_first_request(client, db, seed_user_id, monkeypatch):
+    draft_id = insert_draft(db, seed_user_id, "수정", "field_check")
+    insert_document(db, draft_id, masked_text="문서 내용")
+    monkeypatch.setattr(llm, "infer_fields", lambda **kwargs: FAKE_L1_FIELDS)
+
+    res = infer(client, draft_id)
+
+    assert res.status_code == 200
+    body = res.json()
+    assert len(body["fields"]) == 1
+    assert body["fields"][0]["label"] == "보호자 연락처"
+    assert body["draft"]["reanalysis_count"] == 0
+
+
+# 멱등성: 본문에 flagged_field_ids 키가 없고 이미 fields가 있으면 L1을 다시 부르지 않는다
+def test_us03_infer_duplicate_call_reuses_stored_fields(
+    client, db, seed_user_id, monkeypatch
+):
+    draft_id = insert_draft(db, seed_user_id, "수정", "field_check")
+    insert_form_field(db, draft_id, label="기존 항목")
+
+    def fail_if_called(**kwargs):
+        raise AssertionError("L1을 다시 부르면 안 된다")
+
+    monkeypatch.setattr(llm, "infer_fields", fail_if_called)
+
+    res = infer(client, draft_id)
+
+    assert res.status_code == 200
+    assert res.json()["fields"][0]["label"] == "기존 항목"
+
+
+# US-03 #1 (정상): 원본과 다름 표시 항목이 있으면 재분석해 기존 항목을 새 항목으로 바꾼다
+def test_us03_reanalysis_replaces_fields_and_increments_count(
+    client, db, seed_user_id, monkeypatch
+):
+    draft_id = insert_draft(db, seed_user_id, "수정", "field_check")
+    insert_document(db, draft_id, masked_text="문서 내용")
+    old_field_id = insert_form_field(db, draft_id, label="틀린 항목")
+    monkeypatch.setattr(llm, "infer_fields", lambda **kwargs: FAKE_L1_FIELDS)
+
+    res = infer(client, draft_id, {"flagged_field_ids": [old_field_id]})
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["draft"]["reanalysis_count"] == 1
+    assert all(f["id"] != old_field_id for f in body["fields"])
+    assert (
+        db.execute(
+            "SELECT COUNT(*) FROM form_field WHERE id = ?", (old_field_id,)
+        ).fetchone()[0]
+        == 0
+    )
+
+
+# US-03 #2 (실패·거절): '원본과 다름' 표시가 0개이면 L1을 부르지 않고 거절한다
+def test_us03_reanalysis_rejects_empty_flagged_ids(
+    client, db, seed_user_id, monkeypatch
+):
+    draft_id = insert_draft(db, seed_user_id, "수정", "field_check")
+
+    def fail_if_called(**kwargs):
+        raise AssertionError("L1을 부르면 안 된다")
+
+    monkeypatch.setattr(llm, "infer_fields", fail_if_called)
+
+    res = infer(client, draft_id, {"flagged_field_ids": []})
+
+    assert res.status_code == 400
+    assert res.json() == {"detail": {"code": "NO_FIELDS_FLAGGED"}}
+
+
+def test_us03_reanalysis_rejects_unknown_flagged_id(client, db, seed_user_id):
+    draft_id = insert_draft(db, seed_user_id, "수정", "field_check")
+    insert_form_field(db, draft_id)
+
+    res = infer(client, draft_id, {"flagged_field_ids": [999999]})
+
+    assert res.status_code == 404
+    assert res.json() == {"detail": {"code": "FIELD_NOT_FOUND"}}
+
+
+# US-03 #3 (실패·거절): 재분석 결과가 규칙 검증을 통과 못해도 머문다(별도 US-02 테스트로 확인),
+# 여기서는 재분석 횟수 한도를 확인한다
+def test_us03_reanalysis_rejects_when_limit_exceeded(client, db, seed_user_id):
+    draft_id = insert_draft(db, seed_user_id, "수정", "field_check", reanalysis_count=3)
+    field_id = insert_form_field(db, draft_id)
+
+    res = infer(client, draft_id, {"flagged_field_ids": [field_id]})
+
+    assert res.status_code == 409
+    assert res.json() == {"detail": {"code": "REANALYSIS_LIMIT_EXCEEDED"}}
+
+
+# L1 호출 실패: 재시도 없이 502, 상태·단계·기존 항목은 바뀌지 않는다
+def test_us03_infer_llm_failure_returns_502_without_state_change(
+    client, db, seed_user_id, monkeypatch
+):
+    draft_id = insert_draft(db, seed_user_id, "수정", "field_check")
+    insert_document(db, draft_id, masked_text="문서 내용")
+
+    def raise_error(**kwargs):
+        raise llm.LLMCallError("timeout")
+
+    monkeypatch.setattr(llm, "infer_fields", raise_error)
+
+    res = infer(client, draft_id)
+
+    assert res.status_code == 502
+    assert res.json() == {"detail": {"code": "LLM_CALL_FAILED"}}
+    assert (
+        db.execute(
+            "SELECT COUNT(*) FROM form_field WHERE draft_id = ?", (draft_id,)
+        ).fetchone()[0]
+        == 0
+    )
+    row = db.execute(
+        "SELECT status, step FROM draft WHERE id = ?", (draft_id,)
+    ).fetchone()
+    assert row["status"] == "수정"
+    assert row["step"] == "field_check"

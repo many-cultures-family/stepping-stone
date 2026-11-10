@@ -106,3 +106,55 @@ def insert_draft(conn, user_id, status, step, **fields):
     )
     conn.commit()
     return cur.lastrowid
+
+
+def insert_form_field(conn, draft_id, **overrides):
+    # F-02 테스트에서 L1 호출 없이 바로 원하는 입력 항목을 만든다
+    import json
+
+    row = {
+        "label": "항목",
+        "format_code": "name",
+        "required": 1,
+        "prior_info_key": None,
+        "description": "설명",
+        "guide_text": None,
+        "options": None,
+        "bbox": "{}",
+        "flagged_wrong": 0,
+    }
+    row.update(overrides)
+    if isinstance(row["bbox"], dict):
+        row["bbox"] = json.dumps(row["bbox"])
+    if isinstance(row["options"], (list, dict)):
+        row["options"] = json.dumps(row["options"])
+
+    columns = ["draft_id", *row.keys()]
+    placeholders = ", ".join("?" for _ in columns)
+    values = [draft_id, *row.values()]
+    cur = conn.execute(
+        f"INSERT INTO form_field ({', '.join(columns)}) VALUES ({placeholders})",
+        values,
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def insert_document(conn, draft_id, masked_text="", **overrides):
+    row = {
+        "file_path": f"/tmp/fake-{draft_id}.pdf",
+        "mime_type": "application/pdf",
+        "masked_text": masked_text,
+        "page_count": 1,
+        "empty_pages": None,
+    }
+    row.update(overrides)
+    columns = ["draft_id", *row.keys()]
+    placeholders = ", ".join("?" for _ in columns)
+    values = [draft_id, *row.values()]
+    cur = conn.execute(
+        f"INSERT INTO document ({', '.join(columns)}) VALUES ({placeholders})",
+        values,
+    )
+    conn.commit()
+    return cur.lastrowid
