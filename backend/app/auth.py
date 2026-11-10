@@ -147,21 +147,19 @@ async def google_callback(request: Request):
 
     google_sub = userinfo["sub"]
     email = userinfo["email"]
+    language = pick_language(request.headers.get("accept-language"))
     conn = db.connect()
     try:
         with conn:
-            row = conn.execute(
-                "SELECT id FROM user WHERE google_sub = ?", (google_sub,)
-            ).fetchone()
-            if row is None:
-                language = pick_language(request.headers.get("accept-language"))
-                user_id = conn.execute(
-                    "INSERT INTO user (google_sub, email, language) VALUES (?, ?, ?)",
-                    (google_sub, email, language),
-                ).lastrowid
-            else:
-                user_id = row["id"]
-                conn.execute("UPDATE user SET email = ? WHERE id = ?", (email, user_id))
+            # 없으면 만들고 있으면 email만 고친다. 한 문장으로 처리해서, 처음 로그인하는 사용자의
+            # 콜백이 동시에 두 번 와도 google_sub UNIQUE 위반(500)이 나지 않는다.
+            # language는 새 사용자일 때만 정하고, 기존 사용자의 값은 건드리지 않는다.
+            user_id = conn.execute(
+                "INSERT INTO user (google_sub, email, language) VALUES (?, ?, ?) "
+                "ON CONFLICT (google_sub) DO UPDATE SET email = excluded.email "
+                "RETURNING id",
+                (google_sub, email, language),
+            ).fetchone()["id"]
     finally:
         conn.close()
 
