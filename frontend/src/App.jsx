@@ -5,6 +5,7 @@ import { useAuth } from './auth/useAuth.js'
 import Layout from './components/Layout.jsx'
 import LoginRequired from './components/LoginRequired.jsx'
 import { Container } from './components/ui.jsx'
+import AnswerReviewPage from './pages/AnswerReviewPage.jsx'
 import FieldCheckPage from './pages/FieldCheckPage.jsx'
 import LandingPage from './pages/LandingPage.jsx'
 import UploadPage from './pages/UploadPage.jsx'
@@ -18,6 +19,7 @@ const LOGIN_ERROR_MESSAGES = {
 }
 
 // /  랜딩 · /upload  서류 올리기(US-01) · /drafts/:id/fields  입력 항목 확인(F-02, US-02·US-03)
+// /drafts/:id/review  서술형 답변 검토(F-06, US-05)
 function AppContent() {
   const route = matchRoute(usePath())
   const { status } = useAuth()
@@ -61,6 +63,18 @@ function AppContent() {
           onDone={() => navigate('/')}
           onReupload={() => navigate('/upload')}
         />
+      )}
+      {/* F-06 API 명세가 아직 없어 데이터·검토 요청을 연결하지 않았다. 명세가 나오면 여기서 answers·suggestions·onRequestReview 를 넘긴다. */}
+      {route.name === 'review' && status === 'authenticated' && (
+        <AnswerReviewPage
+          key={route.params.draftId}
+          onBack={() => navigate(`/drafts/${route.params.draftId}/write`)}
+        />
+      )}
+      {route.name === 'review' && status === 'anonymous' && (
+        <Container sx={{ py: 6 }}>
+          <LoginRequired />
+        </Container>
       )}
     </Layout>
   )
