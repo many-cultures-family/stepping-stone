@@ -230,14 +230,21 @@ def cancel_draft(draft_id: int, user: Annotated[dict, Depends(auth.current_user)
                     status_code=409, detail={"code": "ALREADY_CANCELED"}
                 )
             conn.execute(
+                "DELETE FROM review_suggestion WHERE field_answer_id IN "
+                "(SELECT field_answer.id FROM field_answer "
+                "JOIN form_field ON form_field.id = field_answer.form_field_id "
+                "WHERE form_field.draft_id = ?)",
+                (draft_id,),
+            )
+            conn.execute(
                 "DELETE FROM field_answer WHERE form_field_id IN "
                 "(SELECT id FROM form_field WHERE draft_id = ?)",
                 (draft_id,),
             )
             conn.execute("DELETE FROM form_field WHERE draft_id = ?", (draft_id,))
             conn.execute("DELETE FROM document WHERE draft_id = ?", (draft_id,))
-            # TODO(F-06·F-07): review_suggestion, privacy_detection 삭제. 두 테이블이
-            # 아직 스키마에 없어서(F-06·F-07 미구현) 여기 자리만 남겨 둔다 (T3)
+            # TODO(F-07): privacy_detection 삭제. 테이블이 아직 스키마에 없어서
+            # (F-07 미구현) 여기 자리만 남겨 둔다 (T3)
             # prior_info는 다른 작성 건이 같이 쓰므로 지우지 않는다 (T3)
     finally:
         conn.close()

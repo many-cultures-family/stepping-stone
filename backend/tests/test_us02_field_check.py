@@ -203,6 +203,34 @@ def test_us02_confirm_forbidden_for_other_users_draft(client, db):
     assert res.json() == {"detail": {"code": "FORBIDDEN_DRAFT"}}
 
 
+# 사전 정보 재사용(US-04): prior_info_key에 매핑된 저장 값을 자동 입력 값으로 돌려준다
+def test_us02_get_fields_includes_saved_prior_info_value(client, db, seed_user_id):
+    draft_id = insert_draft(db, seed_user_id, "수정", "field_check")
+    insert_form_field(
+        db, draft_id, format_code="phone", required=1, prior_info_key="phone"
+    )
+
+    res = get_fields(client, draft_id)
+
+    assert res.status_code == 200
+    # 시드 사전 정보(conftest SEED_PRIOR_INFO)의 phone 값
+    assert res.json()["fields"][0]["prior_info_value"] == "010-0000-1234"
+
+
+# 사전 정보가 매핑돼 있지 않거나 저장된 값이 없으면 null이다
+def test_us02_get_fields_prior_info_value_is_null_when_not_saved(
+    client, db, seed_user_id
+):
+    draft_id = insert_draft(db, seed_user_id, "수정", "field_check")
+    insert_form_field(
+        db, draft_id, format_code="address", required=1, prior_info_key="address"
+    )
+
+    res = get_fields(client, draft_id)
+
+    assert res.json()["fields"][0]["prior_info_value"] is None
+
+
 def test_us02_get_fields_without_login_is_401(anon_client, db, seed_user_id):
     draft_id = insert_draft(db, seed_user_id, "수정", "field_check")
 

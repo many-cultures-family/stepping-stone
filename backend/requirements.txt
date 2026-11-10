@@ -8,6 +8,8 @@ pypdf==6.21.4
 Authlib==1.9.5
 # Starlette SessionMiddleware 서명 쿠키 (LOGIN-API.md)
 itsdangerous==2.2.0
+# 사전 정보(개인정보) 암호화 저장 (DATA-MODEL.md prior_info.value)
+cryptography==50.0.2
 ruff==0.17.3
 pytest==9.2.0
 httpx2==2.16.0

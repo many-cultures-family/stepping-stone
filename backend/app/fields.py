@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app import auth, db, llm
+from app import auth, db, llm, prior_info
 
 router = APIRouter(prefix="/api")
 
@@ -34,7 +34,7 @@ def _load_draft_for_field_check(conn, draft_id, user):
     return row
 
 
-def _row_to_field(row, input_formats):
+def _row_to_field(row, input_formats, prior_info_values):
     fmt = input_formats.get(row["format_code"])
     required = row["required"]
     return {
@@ -45,6 +45,9 @@ def _row_to_field(row, input_formats):
         "format_example": fmt["example"] if fmt else None,
         "required": bool(required) if required is not None else None,
         "prior_info_key": row["prior_info_key"],
+        # 사전 정보 재사용(US-04): 이 항목이 사전 정보에 매핑돼 있고 사용자가 이미
+        # 저장해 둔 값이 있으면 자동 입력 값으로 돌려준다. 없으면 null — 화면이 직접 입력받는다
+        "prior_info_value": prior_info_values.get(row["prior_info_key"]),
         "description": row["description"],
         "bbox": json.loads(row["bbox"]),
         "flagged_wrong": bool(row["flagged_wrong"]),
@@ -69,14 +72,15 @@ def compute_errors(fields, allowed_format_codes):
     return errors
 
 
-def _fetch_fields(conn, draft_id):
+def _fetch_fields(conn, draft_id, user_id):
     input_formats = {
         row["code"]: row for row in conn.execute("SELECT * FROM input_format")
     }
+    prior_info_values = prior_info.fetch_prior_info_values(conn, user_id)
     rows = conn.execute(
         "SELECT * FROM form_field WHERE draft_id = ? ORDER BY id", (draft_id,)
     ).fetchall()
-    return [_row_to_field(row, input_formats) for row in rows]
+    return [_row_to_field(row, input_formats, prior_info_values) for row in rows]
 
 
 def _to_int_bool(value):
@@ -139,7 +143,7 @@ def get_fields(draft_id: int, user: Annotated[dict, Depends(auth.current_user)])
     conn = db.connect()
     try:
         draft = _load_draft_for_field_check(conn, draft_id, user)
-        fields = _fetch_fields(conn, draft_id)
+        fields = _fetch_fields(conn, draft_id, user["id"])
         allowed_format_codes = _allowed_format_codes(conn)
     finally:
         conn.close()
@@ -161,7 +165,7 @@ def infer_fields(
     conn = db.connect()
     try:
         draft = _load_draft_for_field_check(conn, draft_id, user)
-        existing_fields = _fetch_fields(conn, draft_id)
+        existing_fields = _fetch_fields(conn, draft_id, user["id"])
         allowed_format_codes = _allowed_format_codes(conn)
 
         if has_flagged_key and not flagged_field_ids:
@@ -241,7 +245,7 @@ def infer_fields(
             "FROM draft WHERE id = ?",
             (draft_id,),
         ).fetchone()
-        fields = _fetch_fields(conn, draft_id)
+        fields = _fetch_fields(conn, draft_id, user["id"])
     finally:
         conn.close()
 
@@ -253,7 +257,7 @@ def confirm_fields(draft_id: int, user: Annotated[dict, Depends(auth.current_use
     conn = db.connect()
     try:
         draft = _load_draft_for_field_check(conn, draft_id, user)
-        fields = _fetch_fields(conn, draft_id)
+        fields = _fetch_fields(conn, draft_id, user["id"])
         allowed_format_codes = _allowed_format_codes(conn)
         errors = compute_errors(fields, allowed_format_codes)
         # 항목이 하나도 없으면(아직 추론 전) 확정할 수 없다 — errors는 비어 있어도 거절한다

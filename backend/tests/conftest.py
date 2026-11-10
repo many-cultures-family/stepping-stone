@@ -13,6 +13,9 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 CALLBACK_PATH = "/api/auth/google/callback"
 
+# 테스트 전용 Fernet 키 (가짜 값, Fernet.generate_key()로 만듦)
+TEST_PRIOR_INFO_ENCRYPTION_KEY = "sHF-vucV46MN5NfW0cc5uCIbaW0OCufavt20j1JuE2Y="
+
 # DATA-MODEL 시드 2번 (가짜 값). db.init_db()가 넣는다
 SEED_USERINFO = {
     "sub": "test-sub-0001",
@@ -31,6 +34,7 @@ def anon_client(tmp_path, monkeypatch):
     monkeypatch.setenv(
         "GOOGLE_REDIRECT_URI", "http://localhost:5173/api/auth/google/callback"
     )
+    monkeypatch.setenv("PRIOR_INFO_ENCRYPTION_KEY", TEST_PRIOR_INFO_ENCRYPTION_KEY)
     from app.main import app
 
     with TestClient(app) as c:
@@ -135,6 +139,33 @@ def insert_form_field(conn, draft_id, **overrides):
     cur = conn.execute(
         f"INSERT INTO form_field ({', '.join(columns)}) VALUES ({placeholders})",
         values,
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def insert_field_answer(conn, form_field_id, value, **overrides):
+    # F-06 테스트에서 작성(F-04/US-05 API 미구현) 없이 바로 답변 값을 만든다
+    row = {"value": value, "mismatch_acknowledged": 0}
+    row.update(overrides)
+    columns = ["form_field_id", *row.keys()]
+    placeholders = ", ".join("?" for _ in columns)
+    values = [form_field_id, *row.values()]
+    cur = conn.execute(
+        f"INSERT INTO field_answer ({', '.join(columns)}) VALUES ({placeholders})",
+        values,
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def insert_prior_info(conn, user_id, info_key, format_code, value):
+    from app import crypto
+
+    cur = conn.execute(
+        "INSERT INTO prior_info (user_id, info_key, format_code, value) "
+        "VALUES (?, ?, ?, ?)",
+        (user_id, info_key, format_code, crypto.encrypt_value(value)),
     )
     conn.commit()
     return cur.lastrowid

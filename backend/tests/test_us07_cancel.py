@@ -116,6 +116,41 @@ def test_us07_cancel_forbidden_for_other_users_draft(client, db):
     assert res.json() == {"detail": {"code": "FORBIDDEN_DRAFT"}}
 
 
+# F-06 추가: 취소하면 서술형 답변 검토 제안도 함께 지운다 (field_answer가 지워지면 고아가 되므로)
+def test_us07_cancel_deletes_review_suggestions(client, db, seed_user_id):
+    draft_id = insert_draft(db, seed_user_id, "수정", "review")
+    field_cur = db.execute(
+        "INSERT INTO form_field (draft_id, label, format_code, required, "
+        "description, bbox) VALUES (?, '신청 사유', 'long_text', 1, '설명', '{}')",
+        (draft_id,),
+    )
+    db.commit()
+    field_id = field_cur.lastrowid
+    answer_cur = db.execute(
+        "INSERT INTO field_answer (form_field_id, value) VALUES (?, '답변')",
+        (field_id,),
+    )
+    db.commit()
+    answer_id = answer_cur.lastrowid
+    db.execute(
+        "INSERT INTO review_suggestion (field_answer_id, kind, explanation) "
+        "VALUES (?, '맞춤법', '설명')",
+        (answer_id,),
+    )
+    db.commit()
+
+    res = cancel(client, draft_id)
+
+    assert res.status_code == 200
+    assert (
+        db.execute(
+            "SELECT COUNT(*) FROM review_suggestion WHERE field_answer_id = ?",
+            (answer_id,),
+        ).fetchone()[0]
+        == 0
+    )
+
+
 def test_us07_cancel_without_login_is_401(anon_client, db, seed_user_id):
     draft_id = insert_draft(db, seed_user_id, "수정", "field_check")
 
