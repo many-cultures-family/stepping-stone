@@ -60,6 +60,14 @@ async def validation_error(request: Request, exc: RequestValidationError):
         return JSONResponse(
             status_code=400, content={"detail": {"code": "FILE_REQUIRED"}}
         )
+    # POST .../fields:infer에 깨진 JSON이나 flagged_field_ids가 배열[정수]가 아닌
+    # 값을 보내면 기본 422(키 없음과 구분 안 됨, LLM이 잘못 호출될 수 있음) 대신
+    # 400으로 명확히 거절한다 (F-02 리뷰)
+    if request.url.path.endswith("/fields:infer"):
+        return JSONResponse(
+            status_code=400,
+            content={"detail": {"code": "INVALID_FLAGGED_FIELD_IDS"}},
+        )
     return await request_validation_exception_handler(request, exc)
 
 

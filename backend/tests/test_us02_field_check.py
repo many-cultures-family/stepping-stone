@@ -143,3 +143,33 @@ def test_us02_confirm_missing_draft_is_404(client):
 
     assert res.status_code == 404
     assert res.json() == {"detail": {"code": "DRAFT_NOT_FOUND"}}
+
+
+# F-02 리뷰: 아직 추론하지 않아 항목이 0개인 작성 건은 확정할 수 없다
+def test_us02_confirm_rejects_when_no_fields_exist(client, db, seed_user_id):
+    draft_id = insert_draft(db, seed_user_id, "수정", "field_check")
+
+    res = confirm(client, draft_id)
+
+    assert res.status_code == 400
+    assert res.json() == {"detail": {"code": "FIELDS_INVALID", "errors": []}}
+
+    row = db.execute("SELECT step FROM draft WHERE id = ?", (draft_id,)).fetchone()
+    assert row["step"] == "field_check"
+
+
+# F-02 리뷰: 허용 목록은 input_format 테이블이 단일 출처다 — 9종 모두 label·example이 채워져야 한다
+def test_us02_get_fields_includes_label_example_for_every_allowed_code(
+    client, db, seed_user_id
+):
+    draft_id = insert_draft(db, seed_user_id, "수정", "field_check")
+    for code in ("email", "number", "address", "short_text", "choice"):
+        insert_form_field(db, draft_id, format_code=code, required=1)
+
+    res = get_fields(client, draft_id)
+
+    assert res.status_code == 200
+    assert "errors" not in res.json()
+    for field in res.json()["fields"]:
+        assert field["format_label"] is not None
+        assert field["format_example"] is not None
