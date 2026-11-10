@@ -18,9 +18,8 @@ def test_us07_cancel_marks_status_canceled(client, db, seed_user_id):
     assert row["status"] == "취소"
 
 
-# 가정: 제출 후에도 취소를 허용한다 (DRAFT-STATUS-API.md 항목 3,
-# 03-rules-states-llm.md·DATA-MODEL.md 123행엔 제출 조건이 없고 R1·R8·T3 취지상 파기 경로가 필요함.
-# backlog.md US-07은 아직 "제출 전이라면"으로 남아 있어 팀이 반대로 정하면 이 테스트를 바꿔야 한다)
+# 제출 후에도 취소를 허용한다 — 팀 투표로 A안(허용) 확정 (DRAFT-STATUS-API.md 항목 3,
+# 03-rules-states-llm.md·DATA-MODEL.md 123행엔 제출 조건이 없고 R1·R8·T3 취지상 파기 경로가 필요함)
 def test_us07_cancel_allowed_after_submit(client, db, seed_user_id):
     draft_id = insert_draft(
         db, seed_user_id, "성공", "review", submitted_at="2026-01-01 00:00:00"
@@ -100,3 +99,27 @@ def test_us07_cancel_deletes_document_and_fields_but_keeps_prior_info(
     )
     # 사전 정보는 다른 작성 건이 같이 쓰므로 지우지 않는다 (T3)
     assert db.execute("SELECT COUNT(*) FROM prior_info").fetchone()[0] > 0
+
+
+# US-07 (권한): 다른 사용자의 작성 건은 취소할 수 없다
+def test_us07_cancel_forbidden_for_other_users_draft(client, db):
+    other_user_id = db.execute(
+        "INSERT INTO user (google_sub, email, language) VALUES (?, ?, ?)",
+        ("other-sub-0001", "other@example.com", "ko"),
+    ).lastrowid
+    db.commit()
+    draft_id = insert_draft(db, other_user_id, "수정", "field_check")
+
+    res = cancel(client, draft_id)
+
+    assert res.status_code == 403
+    assert res.json() == {"detail": {"code": "FORBIDDEN_DRAFT"}}
+
+
+def test_us07_cancel_without_login_is_401(anon_client, db, seed_user_id):
+    draft_id = insert_draft(db, seed_user_id, "수정", "field_check")
+
+    res = cancel(anon_client, draft_id)
+
+    assert res.status_code == 401
+    assert res.json() == {"detail": {"code": "LOGIN_REQUIRED"}}

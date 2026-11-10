@@ -55,3 +55,27 @@ def test_us06_submit_missing_draft_is_404(client):
 
     assert res.status_code == 404
     assert res.json() == {"detail": {"code": "DRAFT_NOT_FOUND"}}
+
+
+# US-06 (권한): 다른 사용자의 작성 건은 제출할 수 없다
+def test_us06_submit_forbidden_for_other_users_draft(client, db):
+    other_user_id = db.execute(
+        "INSERT INTO user (google_sub, email, language) VALUES (?, ?, ?)",
+        ("other-sub-0001", "other@example.com", "ko"),
+    ).lastrowid
+    db.commit()
+    draft_id = insert_draft(db, other_user_id, "성공", "review")
+
+    res = submit(client, draft_id)
+
+    assert res.status_code == 403
+    assert res.json() == {"detail": {"code": "FORBIDDEN_DRAFT"}}
+
+
+def test_us06_submit_without_login_is_401(anon_client, db, seed_user_id):
+    draft_id = insert_draft(db, seed_user_id, "성공", "review")
+
+    res = submit(anon_client, draft_id)
+
+    assert res.status_code == 401
+    assert res.json() == {"detail": {"code": "LOGIN_REQUIRED"}}

@@ -128,10 +128,7 @@ def init_db():
         conn.executemany(
             "INSERT OR IGNORE INTO prior_info (user_id, info_key, format_code, value) "
             "VALUES (?, ?, ?, ?)",
-            [
-                (seed_user["id"], key, fmt, value)
-                for key, fmt, value in SEED_PRIOR_INFO
-            ],
+            [(seed_user["id"], key, fmt, value) for key, fmt, value in SEED_PRIOR_INFO],
         )
         conn.commit()
     finally:

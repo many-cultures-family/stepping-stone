@@ -67,3 +67,26 @@ def test_f08_next_action_covers_all_steps_and_statuses(client, db, seed_user_id)
     actual_by_id = {d["id"]: d["next_action"] for d in res.json()["drafts"]}
     for draft_id, expected in expected_by_id.items():
         assert actual_by_id[draft_id] == expected
+
+
+# 권한: 로그인한 사용자 본인 소유의 작성 건만 돌려준다 (다른 사용자 건은 섞이지 않는다)
+def test_f08_list_only_returns_own_drafts(client, db, seed_user_id):
+    other_user_id = db.execute(
+        "INSERT INTO user (google_sub, email, language) VALUES (?, ?, ?)",
+        ("other-sub-0001", "other@example.com", "ko"),
+    ).lastrowid
+    db.commit()
+    mine = insert_draft(db, seed_user_id, "수정", "upload")
+    insert_draft(db, other_user_id, "수정", "upload")
+
+    res = client.get(LIST_PATH)
+
+    ids = [d["id"] for d in res.json()["drafts"]]
+    assert ids == [mine]
+
+
+def test_f08_list_without_login_is_401(anon_client):
+    res = anon_client.get(LIST_PATH)
+
+    assert res.status_code == 401
+    assert res.json() == {"detail": {"code": "LOGIN_REQUIRED"}}
