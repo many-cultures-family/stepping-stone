@@ -1,6 +1,6 @@
 import { Box, ButtonBase, FormControlLabel, Radio, RadioGroup, Stack, Tooltip, Typography } from '@mui/material'
 import { ds } from '../../theme.js'
-import { AlertCircleIcon } from '../icons.jsx'
+import { AlertCircleIcon, CheckCircleIcon } from '../icons.jsx'
 import { Pill } from '../ui.jsx'
 
 // 가상 폼 한 칸 (라벨 칸 | 입력 칸). 안쪽은 의도적으로 각진 서식 스타일(1px 회색 테두리 표).
@@ -114,15 +114,17 @@ export default function VirtualFormRow({ answer, value, saveState, formatError, 
         </Stack>
 
         <Stack direction="row" spacing={1} sx={{ mt: 1, alignItems: 'center', flexWrap: 'wrap', rowGap: 0.75, minHeight: 24 }}>
-          {pending && (
-            <Tooltip title={`저장된 정보: ${m.prior_value}`} arrow>
-              <Box component="span" tabIndex={0} sx={{ display: 'inline-flex', borderRadius: 999, '&:focus-visible': { outline: `3px solid ${ds.primaryLine}` } }}>
-                <Pill tone="orange" size="sm">저장된 정보와 달라요</Pill>
-              </Box>
-            </Tooltip>
+          {/* 알약은 표시만 한다. 툴팁·팝오버는 옆 경고 아이콘 버튼 하나로 받는다 (탭 정지점 중복 방지) */}
+          {pending && <Pill tone="orange" size="sm">저장된 정보와 달라요</Pill>}
+          {/* 형식 오류가 난 칸은 아직 저장되지 않은 값이라, 저장된 값 기준의 '확인함'·'같아요'를 숨긴다 */}
+          {acknowledged && !formatError && <Pill tone="grey" size="sm">확인함 · 그대로 둠</Pill>}
+          {same && !formatError && (
+            // 초록 글자(green/greenSoft 약 3:1)는 글자 대비 기준 미달 → 글자는 ink, 초록은 아이콘에만
+            <Pill tone="green" size="sm" sx={{ color: ds.ink }}>
+              <CheckCircleIcon size={12} color={ds.green} />
+              저장된 정보와 같아요
+            </Pill>
           )}
-          {acknowledged && <Pill tone="grey" size="sm">확인함 · 그대로 둠</Pill>}
-          {same && <Pill tone="green" size="sm">저장된 정보와 같아요</Pill>}
           {saveState === 'saving' && (
             <Typography variant="caption" sx={{ color: ds.muted }} role="status">
               저장 중…

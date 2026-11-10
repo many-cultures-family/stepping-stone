@@ -25,14 +25,15 @@ const BASE = [
   { label: '신청 사유', format_code: 'long_text', required: false, prior_info_key: null, description: '왜 신청하는지 짧게 설명합니다', options: null, value: null, acknowledged: false },
 ]
 
-// 형식 검증 정규식 (일반 형식만). long_text 는 통과, choice 는 options 포함 여부
+// 형식 검증 정규식 = DATA-MODEL.md input_format.pattern (시드 1번) 그대로. 서버 규칙 엔진과 같아야 한다.
+// long_text 는 pattern 이 없어 통과, choice 는 정규식 대신 options 포함 여부
 const PATTERNS = {
-  phone: /^01\d-\d{3,4}-\d{4}$/,
+  phone: /^010-\d{4}-\d{4}$/,
   date: /^\d{4}\.\d{2}\.\d{2}$/,
-  email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+  email: /^[^@\s]+@[^@\s]+\.[^@\s]+$/,
   number: /^\d+$/,
-  name: /^[A-Za-z가-힣][A-Za-z가-힣 .'-]{0,59}$/,
-  address: /^.{2,100}$/,
+  name: /^.{1,50}$/,
+  address: /^.{1,200}$/,
   short_text: /^.{1,100}$/,
 }
 
@@ -64,11 +65,16 @@ function findField(s, fieldId) {
   return f
 }
 
-/** 사전 정보와 비교해 mismatch 를 매번 계산한다 (저장 안 함). 값 비교는 앞뒤 공백을 뗀 뒤 한다. */
+/**
+ * 사전 정보와 비교해 mismatch 를 매번 계산한다 (저장 안 함). 값 비교는 앞뒤 공백을 뗀 뒤 한다.
+ * 빈 값(null·'')은 불일치로 보지 않는다(differs=false) [제안]: 아직 안 쓴 칸이지 다르게 쓴 칸이 아니고,
+ * 필수 누락은 성공 조건(R9) 확인 때 따로 판정한다. VIRTUAL-FORM-API.md 에 아직 정해지지 않은 규칙이다.
+ */
 export function computeMismatch(field, value) {
   const prior = field.prior_info_key ? PRIOR_INFO[field.prior_info_key] : undefined
   if (prior === undefined) return { has_prior_info: false }
-  const differs = (value ?? '').trim() !== prior.trim()
+  const written = (value ?? '').trim()
+  const differs = written !== '' && written !== prior.trim()
   return { has_prior_info: true, prior_value: prior, differs, mismatch_acknowledged: differs ? field.acknowledged : false }
 }
 
@@ -77,7 +83,7 @@ function validate(field, value) {
   if (field.format_code === 'long_text') return true
   if (field.format_code === 'choice') return field.options?.includes(value) ?? false
   const pattern = PATTERNS[field.format_code]
-  return pattern ? pattern.test(value.trim()) : true
+  return pattern ? pattern.test(value) : true
 }
 
 function toAnswer(f) {

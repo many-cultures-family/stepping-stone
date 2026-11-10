@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Box, Button, ButtonBase, Skeleton, Snackbar, Stack, Typography } from '@mui/material'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Box, Button, ButtonBase, CircularProgress, Skeleton, Snackbar, Stack, Typography } from '@mui/material'
 import { acknowledgeMismatch, getAnswers, saveAnswer } from '../api/answers.js'
 import { useAuth } from '../auth/useAuth.js'
 import { AlertCircleIcon, CheckCircleIcon } from '../components/icons.jsx'
@@ -44,6 +44,10 @@ export default function WritePage({ draftId, onDone }) {
   const [reviewOpen, setReviewOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [finished, setFinished] = useState(false)
+  const [finishing, setFinishing] = useState(false) // '연습 마치기'가 저장 중인 요청을 기다리는 중
+  // 마치기 판단은 렌더 시점 값이 아니라 '지금' 값을 봐야 해서 ref 로도 들고 있는다
+  const answersRef = useRef([])
+  const inflightRef = useRef(new Map()) // field_id → 저장 중인 Promise
   const [toast, setToast] = useState(null)
 
   const fetchAnswers = useCallback(
@@ -51,6 +55,7 @@ export default function WritePage({ draftId, onDone }) {
       getAnswers(draftId)
         .then((data) => {
           if (isCancelled()) return
+          answersRef.current = data.answers
           setAnswers(data.answers)
           setValues(Object.fromEntries(data.answers.map((a) => [a.field_id, a.value ?? ''])))
           setLoadState({ status: 'ready', error: null })
@@ -82,24 +87,34 @@ export default function WritePage({ draftId, onDone }) {
     setToast(errorText(e))
   }
 
-  const patchAnswer = (fieldId, patch) => setAnswers((prev) => prev.map((a) => (a.field_id === fieldId ? { ...a, ...patch } : a)))
+  // ref 를 먼저 동기로 바꾸고 화면 상태를 맞춘다 (await 뒤에 바로 최신 값을 읽을 수 있게)
+  function patchAnswer(fieldId, patch) {
+    answersRef.current = answersRef.current.map((a) => (a.field_id === fieldId ? { ...a, ...patch } : a))
+    setAnswers(answersRef.current)
+  }
 
   // 칸을 벗어날 때(blur) 저장. 서버에 있는 값과 같으면 호출하지 않는다.
-  async function commit(answer, value) {
+  // 저장 중인 요청은 inflightRef 에 남겨 '연습 마치기'가 기다릴 수 있게 한다.
+  function commit(answer, value) {
     const current = answer.value ?? ''
     if (value === current && !formatErrors[answer.field_id]) return
     const id = answer.field_id
     setSaveStates((p) => ({ ...p, [id]: 'saving' }))
-    try {
-      const res = await saveAnswer(draftId, id, value)
-      patchAnswer(id, { value: res.value, mismatch: res.mismatch })
-      setFormatErrors((p) => ({ ...p, [id]: false }))
-      setSaveStates((p) => ({ ...p, [id]: 'saved' }))
-    } catch (e) {
-      setSaveStates((p) => ({ ...p, [id]: undefined }))
-      if (e?.code === 'FORMAT_INVALID') setFormatErrors((p) => ({ ...p, [id]: true }))
-      else handleApiError(e)
-    }
+    const job = saveAnswer(draftId, id, value)
+      .then((res) => {
+        patchAnswer(id, { value: res.value, mismatch: res.mismatch })
+        setFormatErrors((p) => ({ ...p, [id]: false }))
+        setSaveStates((p) => ({ ...p, [id]: 'saved' }))
+      })
+      .catch((e) => {
+        setSaveStates((p) => ({ ...p, [id]: undefined }))
+        if (e?.code === 'FORMAT_INVALID') setFormatErrors((p) => ({ ...p, [id]: true }))
+        else handleApiError(e)
+      })
+      .finally(() => {
+        if (inflightRef.current.get(id) === job) inflightRef.current.delete(id)
+      })
+    inflightRef.current.set(id, job)
   }
 
   // 저장된 정보로 바꾸기 → 사전 정보 값을 그대로 저장
@@ -134,7 +149,7 @@ export default function WritePage({ draftId, onDone }) {
     }
   }
 
-  const pendingList = useMemo(() => answers.filter((a) => a.mismatch.has_prior_info && a.mismatch.differs && !a.mismatch.mismatch_acknowledged), [answers])
+  const pendingList = useMemo(() => answers.filter(isPending), [answers])
   const acknowledgedCount = answers.filter((a) => a.mismatch.has_prior_info && a.mismatch.differs && a.mismatch.mismatch_acknowledged).length
   const formatErrorCount = Object.values(formatErrors).filter(Boolean).length
   const popoverAnswer = popover ? answers.find((a) => a.field_id === popover.fieldId) : null
@@ -145,8 +160,15 @@ export default function WritePage({ draftId, onDone }) {
     document.getElementById(`vf-${fieldId}`)?.focus({ preventScroll: true })
   }
 
-  function handleFinish() {
-    if (pendingList.length > 0) {
+  // 칸을 고치고 바로 누르면 blur 저장이 아직 끝나지 않았을 수 있다.
+  // 저장 중인 요청을 모두 기다린 뒤 '지금' 값(answersRef)으로 남은 불일치를 다시 센다.
+  async function handleFinish() {
+    if (inflightRef.current.size > 0) {
+      setFinishing(true)
+      while (inflightRef.current.size > 0) await Promise.allSettled([...inflightRef.current.values()])
+      setFinishing(false)
+    }
+    if (answersRef.current.some(isPending)) {
       setReviewOpen(true)
       return
     }
@@ -221,9 +243,10 @@ export default function WritePage({ draftId, onDone }) {
               확인할 칸
             </Typography>
             {pendingList.length === 0 ? (
-              <Stack direction="row" spacing={1} sx={{ alignItems: 'center', color: ds.green }}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                {/* 글자는 ink(대비 4.5:1 이상), 초록은 아이콘에만 (green/card 3.13:1 은 글자 기준 미달) */}
                 <CheckCircleIcon size={22} color={ds.green} />
-                <Typography sx={{ fontWeight: 600 }}>다른 칸이 없어요</Typography>
+                <Typography sx={{ fontWeight: 600, color: ds.ink }}>다른 칸이 없어요</Typography>
               </Stack>
             ) : (
               <Stack component="ul" spacing={1} sx={{ m: 0, p: 0, listStyle: 'none' }}>
@@ -252,7 +275,7 @@ export default function WritePage({ draftId, onDone }) {
           </Box>
         </Box>
 
-        <FinishCard pendingCount={pendingList.length} formatErrorCount={formatErrorCount} onFinish={handleFinish} />
+        <FinishCard pendingCount={pendingList.length} formatErrorCount={formatErrorCount} finishing={finishing} onFinish={handleFinish} />
       </Container>
 
       <MismatchPopover anchorEl={popover?.anchorEl} answer={popoverAnswer} busy={busy} onClose={() => setPopover(null)} onUseSaved={useSaved} onKeep={keep} />
@@ -260,7 +283,7 @@ export default function WritePage({ draftId, onDone }) {
       <MismatchReviewDialog
         open={reviewOpen}
         items={pendingList}
-        busy={busy}
+        busy={busy || finishing}
         onClose={() => setReviewOpen(false)}
         onUseSaved={useSaved}
         onKeep={keep}
@@ -284,8 +307,13 @@ export default function WritePage({ draftId, onDone }) {
   )
 }
 
+// 사전 정보와 다르고 아직 '그대로 둘게요'를 누르지 않은 칸
+function isPending(a) {
+  return a.mismatch.has_prior_info && a.mismatch.differs && !a.mismatch.mismatch_acknowledged
+}
+
 // 아래에 붙어 따라오는(sticky) 마무리 카드 (입력 항목 확인 화면의 ActionCard와 같은 모양)
-function FinishCard({ pendingCount, formatErrorCount, onFinish }) {
+function FinishCard({ pendingCount, formatErrorCount, finishing, onFinish }) {
   return (
     <Box
       sx={{
@@ -312,8 +340,8 @@ function FinishCard({ pendingCount, formatErrorCount, onFinish }) {
           {formatErrorCount > 0 ? `형식이 맞지 않은 칸이 ${formatErrorCount}개 있어요. ` : ''}연습 화면이라 어디에도 제출되지 않아요.
         </Typography>
       </Box>
-      <Button variant="contained" color="secondary" size="large" onClick={onFinish} sx={{ minWidth: 140, flexShrink: 0 }}>
-        연습 마치기
+      <Button variant="contained" color="secondary" size="large" disabled={finishing} onClick={onFinish} sx={{ minWidth: 140, flexShrink: 0 }}>
+        {finishing ? <CircularProgress size={22} thickness={5} sx={{ color: 'white' }} aria-label="저장을 마무리하는 중" /> : '연습 마치기'}
       </Button>
     </Box>
   )
