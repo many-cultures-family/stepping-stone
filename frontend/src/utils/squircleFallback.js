@@ -7,7 +7,7 @@
 // 크기가 바뀌면(ResizeObserver) 다시 계산한다.
 //
 // 한계: clip-path 는 요소 밖으로 나가는 그림자·포커스 테두리도 함께 자른다. 그래서 이 대체 경로에서만
-// 그림자는 잘리고, 모서리 부근의 얇은 테두리는 짧게 보일 수 있다. (corner-shape 지원 브라우저는 영향 없음)
+// 그림자는 잘린다. 요소 자신의 테두리는 borderStroke() 가 SVG 선으로 다시 그린다. (corner-shape 지원 브라우저는 영향 없음)
 import { squirclePath, supportsCornerShape } from './squircle.js'
 
 const APPLIED = 'data-squircle-js'
@@ -36,8 +36,36 @@ function cssRadii(el, w) {
   return radii
 }
 
+// clip-path 는 요소의 테두리도 같이 잘라 버려서(상자 가장자리의 1px 테두리가 반쯤 지워진다) 테두리가 거의 안 보인다.
+// 그래서 테두리 색은 투명으로 두고(두께는 그대로라 레이아웃 불변), 같은 스쿼클 path 를 안쪽으로 반 두께 줄여
+// SVG 선으로 배경에 그린다. clip-path 안쪽에 있어 잘리지 않고 두께도 일정하다.
+function borderStroke(el, w, h, radii) {
+  const cs = getComputedStyle(el)
+  const bw = Number.parseFloat(cs.borderTopWidth)
+  const same = ['Right', 'Bottom', 'Left'].every((side) => Number.parseFloat(cs[`border${side}Width`]) === bw)
+  if (!bw || !same || cs.borderTopStyle !== 'solid' || cs.borderTopColor === 'rgba(0, 0, 0, 0)') return false
+  const half = bw / 2
+  const inner = radii.map((r) => Math.max(0, r - half))
+  const d = squirclePath(w - bw, h - bw, inner, { x: half, y: half })
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">` +
+    `<path d="${d}" fill="none" stroke="${cs.borderTopColor}" stroke-width="${bw}"/></svg>`
+  const layer = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`
+  const base = cs.backgroundImage === 'none' ? '' : `, ${cs.backgroundImage}`
+  el.style.setProperty('background-image', `${layer}${base}`)
+  el.style.setProperty('background-origin', 'border-box')
+  el.style.setProperty('background-repeat', 'no-repeat')
+  el.style.setProperty('border-color', 'transparent')
+  return true
+}
+
+function clearBorder(el) {
+  ;['background-image', 'background-origin', 'background-repeat', 'border-color'].forEach((k) => el.style.removeProperty(k))
+}
+
 function clear(el) {
   if (!el.hasAttribute(APPLIED)) return
+  clearBorder(el)
   el.style.removeProperty('clip-path')
   el.style.removeProperty('border-radius')
   el.removeAttribute(APPLIED)
@@ -55,11 +83,13 @@ function apply(el) {
     clear(el)
     return
   }
+  clearBorder(el) // 우리가 넣은 테두리 선을 빼야 CSS 가 정한 현재 배경·테두리 색을 읽을 수 있다
   const radii = cssRadii(el, w)
   if (radii.every((v) => v === 0)) {
     clear(el)
     return
   }
+  borderStroke(el, w, h, radii)
   el.style.setProperty('clip-path', `path('${squirclePath(w, h, radii)}')`)
   // 원 모양 border-radius 가 남아 있으면 스쿼클보다 모서리를 더 깎아 배경이 비어 보인다 → 0 으로
   el.style.setProperty('border-radius', '0px')

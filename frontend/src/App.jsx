@@ -6,6 +6,7 @@ import Layout from './components/Layout.jsx'
 import LoginRequired from './components/LoginRequired.jsx'
 import { Container } from './components/ui.jsx'
 import { PRIOR_INFO_KEYS } from './i18n/priorInfo.js'
+import DraftListPage from './pages/DraftListPage.jsx'
 import FieldCheckPage from './pages/FieldCheckPage.jsx'
 import LandingPage from './pages/LandingPage.jsx'
 import PriorInfoPage from './pages/PriorInfoPage.jsx'
@@ -19,7 +20,7 @@ const LOGIN_ERROR_MESSAGES = {
   GOOGLE_LOGIN_FAILED: '로그인 중 문제가 생겼어요. 다시 시도해 주세요.',
 }
 
-// /  랜딩 · /upload  서류 올리기(US-01) · /drafts/:id/fields  입력 항목 확인(F-02, US-02·US-03)
+// /  랜딩 · /upload  서류 올리기(US-01) · /drafts  내 작성 목록(F-08, US-06·US-07) · /drafts/:id/fields  입력 항목 확인(F-02, US-02·US-03)
 // /drafts/:id/prior-info  사전 정보 입력 · /prior-info  내 사전 정보 관리 (F-03, US-04)
 function AppContent() {
   const route = matchRoute(usePath())
@@ -56,6 +57,7 @@ function AppContent() {
           <LoginRequired />
         </Container>
       )}
+      {route.name === 'drafts' && <DraftListPage />}
       {route.name === 'fields' && (
         <FieldCheckPage
           key={route.params.draftId}

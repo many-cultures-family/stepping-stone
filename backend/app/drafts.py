@@ -1,15 +1,15 @@
-# 작성 건 API (docs/API.md 항목 1, US-01 #1)
+# 작성 건 API (docs/API.md 항목 1, US-01 #1). 로그인 필요
 import io
 import os
 import uuid
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pypdf import PdfReader
 from pypdf.errors import PyPdfError
 
-from app import db
+from app import auth, db
 
 router = APIRouter(prefix="/api")
 
@@ -37,14 +37,18 @@ def count_pages(data, mime_type):
         return 1
     try:
         return len(PdfReader(io.BytesIO(data)).pages)
-    except (PyPdfError, AttributeError, KeyError, IndexError, TypeError, ValueError):
+    except PyPdfError, AttributeError, KeyError, IndexError, TypeError, ValueError:
         # 서명만 PDF이고 읽을 수 없는 파일. 깨진 PDF는 PdfReadError 말고도
         # AttributeError 등을 내므로 500 대신 415로 돌려준다
         raise HTTPException(status_code=415, detail={"code": "FILE_TYPE_NOT_ALLOWED"})
 
 
 @router.post("/drafts", status_code=201)
-async def create_draft(file: Annotated[UploadFile | None, File()] = None):
+async def create_draft(
+    user: Annotated[dict, Depends(auth.current_user)],
+    file: Annotated[UploadFile | None, File()] = None,
+):
+    # 로그인하지 않은 사용자는 올릴 수 없다 (US-01 권한, LOGIN-API.md) → 401 LOGIN_REQUIRED
     # 필수 File이면 FastAPI가 422를 주므로 직접 400으로 처리한다.
     # 파일 대신 글자로 보낸 file은 main.py의 검증 오류 처리기가 400으로 바꾼다
     if file is None:
@@ -70,7 +74,7 @@ async def create_draft(file: Annotated[UploadFile | None, File()] = None):
         with conn:
             cur = conn.execute(
                 "INSERT INTO draft (user_id, status, step, reanalysis_count) VALUES (?, ?, ?, 0)",
-                (db.get_seed_user_id(conn), status, step),
+                (user["id"], status, step),
             )
             draft_id = cur.lastrowid
             conn.execute(

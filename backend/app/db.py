@@ -5,7 +5,7 @@ from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
-# 로그인(US-01 #4) 전까지 모든 작성 건의 주인으로 쓰는 시드 사용자 (DATA-MODEL 시드 2번, 가짜 값)
+# 테스트·시연용 시드 사용자 (DATA-MODEL 시드 2번, 가짜 값). 테스트는 이 google_sub로 로그인한다
 SEED_GOOGLE_SUB = "test-sub-0001"
 SEED_EMAIL = "tester@example.com"
 SEED_LANGUAGE = "vi"
@@ -63,10 +63,3 @@ def init_db():
         conn.commit()
     finally:
         conn.close()
-
-
-def get_seed_user_id(conn):
-    row = conn.execute(
-        "SELECT id FROM user WHERE google_sub = ?", (SEED_GOOGLE_SUB,)
-    ).fetchone()
-    return row["id"]

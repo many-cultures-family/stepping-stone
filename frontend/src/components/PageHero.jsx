@@ -5,16 +5,16 @@ import { Container } from './ui.jsx'
 const STEPS = ['서류 올리기', '입력 항목 확인', '사전 정보 입력']
 
 // 작업 화면 상단의 하늘색 띠 (랜딩 히어로를 낮게 줄인 형태) + 진행 단계 표시
+// step={null} 이면 진행 단계를 그리지 않는다 (작성 목록처럼 단계가 없는 화면)
 export default function PageHero({ step = 0, overline, title, description, aside, children }) {
   return (
     <Container sx={{ px: { xs: 1, sm: 1.5, md: 2 }, pt: { xs: 1, md: 1.5 } }}>
       <Box sx={{ ...squircleResponsive({ xs: 24, md: radius.hero }), background: ds.sky, px: { xs: 2.5, sm: 4, md: 7 }, py: { xs: 3.5, md: 6 } }}>
-        {/* step={null}: 작성 흐름 밖의 화면(예: 내 사전 정보 관리)이라 진행 단계를 숨긴다 */}
         {step !== null && <Stepper current={step} />}
         <Stack
           direction={{ xs: 'column', md: 'row' }}
           spacing={3}
-          sx={{ mt: step !== null ? { xs: 3.5, md: 5 } : 0,justifyContent: 'space-between', alignItems: { md: 'flex-end' } }}
+          sx={{ mt: step !== null ? { xs: 3.5, md: 5 } : 0, justifyContent: 'space-between', alignItems: { md: 'flex-end' } }}
         >
           <Box sx={{ maxWidth: 680, minWidth: 0 }}>
             {overline && (
