@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
-import { Box, Button, Drawer, MenuItem, Select, Stack, Typography } from '@mui/material'
+import { Box, Button, Drawer, MenuItem, Select, Snackbar, Stack, Typography } from '@mui/material'
 import { logout, startGoogleLogin, updateLanguage } from '../api/auth.js'
+import { loginErrorText } from '../auth/loginErrors.js'
 import { useAuth } from '../auth/useAuth.js'
 import useActiveSection from '../hooks/useActiveSection.js'
 import useScrollState from '../hooks/useScrollState.js'
@@ -32,15 +33,17 @@ export function Logo({ size = 34 }) {
 const LANGUAGE_LABELS = { ko: '한국어', vi: 'Tiếng Việt', zh: '中文', en: 'English' }
 
 function AuthControls({ compact }) {
-  const { status, user, refresh, setLoggedOut, setUser } = useAuth()
+  const { status, user, setLoggedOut, setUser } = useAuth()
   const [busy, setBusy] = useState(false)
+  const [toast, setToast] = useState(null)
 
   async function handleLogin() {
     setBusy(true)
     try {
+      // 서버가 구글 로그인 화면으로 페이지를 이동시키므로 이 아래는 이동 실패(오류)일 때만 온다
       await startGoogleLogin()
-      // 실제 모드는 페이지 이동으로 끝나 아래 줄까지 오지 않는다. mock 모드에서만 의미 있음.
-      await refresh()
+    } catch (e) {
+      setToast(loginErrorText(e))
     } finally {
       setBusy(false)
     }
@@ -51,6 +54,8 @@ function AuthControls({ compact }) {
     try {
       await logout()
       setLoggedOut()
+    } catch (e) {
+      setToast(e?.code === 'NETWORK_ERROR' ? '서버 연결 실패. 잠시 후 다시 시도해 주세요.' : '로그아웃하지 못했어요. 다시 시도해 주세요.')
     } finally {
       setBusy(false)
     }
@@ -60,13 +65,35 @@ function AuthControls({ compact }) {
     try {
       const { user: updated } = await updateLanguage(e.target.value)
       setUser(updated)
-    } catch {
-      // 실패해도 화면 언어 표시는 그대로 둔다 (헤더에는 별도 오류 문구를 두지 않음).
+    } catch (e) {
+      // 401은 머리 영역까지 비로그인으로 맞춘다. 그 밖의 오류는 화면 언어 표시를 그대로 두고 짧게 알린다.
+      if (e?.code === 'LOGIN_REQUIRED') {
+        setLoggedOut()
+        return
+      }
+      setToast(e?.code === 'LANGUAGE_NOT_ALLOWED' ? '지원하지 않는 언어예요.' : '언어를 바꾸지 못했어요. 다시 시도해 주세요.')
     }
   }
 
+  const snackbar = (
+    <Snackbar
+      open={Boolean(toast)}
+      autoHideDuration={4000}
+      onClose={() => setToast(null)}
+      anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      sx={{ top: { xs: 76, sm: 92 } }}
+      message={toast}
+      slotProps={{
+        content: {
+          sx: { bgcolor: ds.ink, ...squircle(radius.full), px: 3, fontSize: 14, fontWeight: 500, boxShadow: ds.floatShadow, justifyContent: 'center' },
+        },
+      }}
+    />
+  )
+
   if (status === 'anonymous') {
     return (
+      <>
       <Button
         variant="outlined"
         disabled={busy}
@@ -82,11 +109,14 @@ function AuthControls({ compact }) {
           로그인
         </Box>
       </Button>
+      {snackbar}
+      </>
     )
   }
   if (status !== 'authenticated') return null
 
   return (
+    <>
     <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
       <Typography variant="body2" sx={{ display: { xs: 'none', lg: 'block' }, color: ds.text2 }}>
         {user.email}
@@ -110,6 +140,8 @@ function AuthControls({ compact }) {
         로그아웃
       </Button>
     </Stack>
+    {snackbar}
+    </>
   )
 }
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Box, Button, ButtonBase, CircularProgress, Collapse, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Skeleton, Snackbar, Stack, Typography } from '@mui/material'
 import { USE_MOCK } from '../api/client.js'
-import { confirmFields, editField, inferFields, requestReanalysis } from '../api/fields.js'
+import { confirmFields, editField, getFields, inferFields, requestReanalysis } from '../api/fields.js'
 import { REANALYSIS_LIMIT } from '../api/limits.js'
 import { useAuth } from '../auth/useAuth.js'
 import DocumentPreview from '../components/DocumentPreview.jsx'
@@ -19,25 +19,28 @@ const ERROR_TEXT = {
   LOGIN_REQUIRED: '로그인이 필요해요. 다시 로그인해 주세요.',
   FORBIDDEN_DRAFT: '이 문서를 볼 수 있는 권한이 없어요.',
   DRAFT_NOT_FOUND: '문서를 찾을 수 없어요.',
-  DRAFT_STEP_INVALID: '아직 이 단계가 아니에요. 문서를 먼저 올려 주세요.',
+  DRAFT_STEP_INVALID: '이 작성 건은 지금 입력 항목 확인 단계가 아니에요(이미 확정했거나 글자 인식 전이에요).',
   DRAFT_NOT_EDITABLE: '이 문서는 더 이상 고칠 수 없어요.',
   FIELD_NOT_FOUND: '항목을 찾을 수 없어요. 화면을 새로 불러와 주세요.',
   NO_FIELDS_FLAGGED: "'원본과 달라요'로 표시한 항목이 없어요.",
   REANALYSIS_LIMIT_EXCEEDED: '다시 분석은 3번까지만 할 수 있어요.',
   FIELDS_INVALID: '확인이 필요한 항목이 있어요. 빨간 항목을 확인해 주세요.',
+  INVALID_FLAGGED_FIELD_IDS: '표시한 항목을 확인하지 못했어요. 화면을 새로 불러와 주세요.',
+  // 422: 글자 인식(OCR)이 안 됐거나 실패한 문서. 다시 시도해도 같으니 문서를 다시 올리게 안내한다
+  DOCUMENT_NOT_READY: '문서의 글자를 읽지 못했어요. 글자가 잘 보이게 다시 찍어서 올려 주세요.',
   LLM_CALL_FAILED: 'AI가 항목을 찾지 못했어요. 잠시 후 다시 시도해 주세요.',
   NETWORK_ERROR: '서버 연결 실패. 잠시 후 다시 시도해 주세요.',
 }
 const errorText = (e) => ERROR_TEXT[e?.code] ?? '문제가 생겼어요. 다시 시도해 주세요.'
-// 이 코드들은 화면을 그대로 두고 안내만 해 줘도 되는 것이 아니라 다음 단계로 갈 수 없는 상태다
-const BLOCKING_CODES = ['DRAFT_STEP_INVALID', 'DRAFT_NOT_EDITABLE']
+// 이 코드들은 화면을 그대로 두고 안내만 해 줘도 되는 것이 아니라 다음 단계로 갈 수 없는 상태다. 다시 올리기는 DOCUMENT_NOT_READY 에서만 권한다
+const BLOCKING_CODES = ['DRAFT_STEP_INVALID', 'DRAFT_NOT_EDITABLE', 'DOCUMENT_NOT_READY']
 
 // F-02 입력 항목 확인 (US-02 확정, US-03 원본과 다름·재분석)
 // - LLM(L1)이 찾은 항목은 'AI가 찾은 항목'으로 표시하고, 사용자가 '확인했어요'를 눌러야만 확정된다
 // - 오류 판정은 서버 응답의 errors 가 기준이다. errors 가 1개라도 있으면 '확인했어요'를 막는다
 // - '원본과 달라요' 표시는 재분석 요청 전까지는 화면 상태일 뿐 서버에 저장되지 않는다
 // - 재분석하면 서버가 전체 목록을 새 id 로 바꾼다. 사용자가 고친 값은 모두 사라진다
-export default function FieldCheckPage({ draftId, file, onDone, onReupload }) {
+export default function FieldCheckPage({ draftId, file, onDone, onNext, onReupload }) {
   const { status: authStatus, setLoggedOut } = useAuth()
   const [loadState, setLoadState] = useState({ status: 'loading', error: null })
   const [draft, setDraft] = useState(null)
@@ -57,10 +60,12 @@ export default function FieldCheckPage({ draftId, file, onDone, onReupload }) {
     setServerErrors(data.errors ?? [])
   }, [])
 
-  // 처음 불러오기와 '다시 시도'가 같이 쓴다. 최초 추론은 항목이 이미 있으면 저장된 값을 돌려주는 멱등 호출이라 진입 때 불러도 안전하다
+  // 처음 불러오기와 '다시 시도'가 같이 쓴다. 먼저 GET 으로 저장된 항목을 읽는다(step 이 field_check 가 아니면 LLM 을 부르기 전에 409).
+  // 항목이 하나도 없을 때만 최초 추론(inferFields)을 부른다.
   const fetchFields = useCallback(
     (isCancelled = () => false) =>
-      inferFields(draftId)
+      getFields(draftId)
+        .then((data) => (data.fields.length === 0 ? inferFields(draftId) : data))
         .then((data) => {
           if (isCancelled()) return
           applyResponse(data)
@@ -99,8 +104,8 @@ export default function FieldCheckPage({ draftId, file, onDone, onReupload }) {
   const flaggedIds = fields.filter((f) => f.flagged_wrong).map((f) => f.id)
   const requiredCount = fields.filter((f) => f.required === true).length
   const optionalCount = fields.filter((f) => f.required === false).length
-  const reanalysisLeft = draft ? REANALYSIS_LIMIT - draft.reanalysis_count : 0
   const editingField = fields.find((f) => f.id === editingId)
+  const reanalysisLeft = draft ? REANALYSIS_LIMIT - draft.reanalysis_count : 0
 
   function select(id) {
     setSelectedId((cur) => (cur === id ? null : id))
@@ -172,19 +177,26 @@ export default function FieldCheckPage({ draftId, file, onDone, onReupload }) {
   }
 
   if (confirmed) {
-    return <ConfirmedView count={fields.length} requiredCount={requiredCount} onDone={onDone} onReupload={onReupload} />
+    return <ConfirmedView count={fields.length} requiredCount={requiredCount} onDone={onDone} onNext={onNext} />
   }
 
   if (loadState.status === 'loading') return <LoadingView />
 
   if (loadState.status === 'error') {
-    // 409: 재시도해도 소용없는 상태다. 업로드 화면으로 안내한다
+    // 409·422: 재시도해도 소용없는 상태다. 내 작성 목록으로 안내한다
     if (BLOCKING_CODES.includes(loadState.error?.code)) {
       return (
         <EmptyState
           title="지금은 항목을 확인할 수 없어요"
           body={errorText(loadState.error)}
-          action={<Button variant="contained" size="large" onClick={onReupload}>문서 올리러 가기</Button>}
+          action={
+            <Stack direction="row" spacing={1.5}>
+              <Button variant="contained" size="large" onClick={onDone}>내 작성 목록 보기</Button>
+              {loadState.error?.code === 'DOCUMENT_NOT_READY' && (
+                <Button variant="outlined" size="large" onClick={onReupload}>다시 올리기</Button>
+              )}
+            </Stack>
+          }
         />
       )
     }
@@ -473,10 +485,10 @@ function EmptyState({ title, body, action }) {
   )
 }
 
-function ConfirmedView({ count, requiredCount, onDone, onReupload }) {
+function ConfirmedView({ count, requiredCount, onDone, onNext }) {
   return (
     <>
-      <PageHero step={2} overline="STEP 2 완료" title="입력할 칸을 확정했어요" description="다음은 자주 쓰는 정보(이름·연락처 등)를 한 번만 적어 두는 단계예요." />
+      <PageHero step={2} overline="STEP 2 완료" title="입력할 칸을 확정했어요" description={onNext ? '다음 단계는 자주 쓰는 정보(이름·연락처 등)를 적어 두는 사전 정보 입력이에요.' : '다음 단계는 자주 쓰는 정보(이름·연락처 등)를 적어 두는 사전 정보 입력이에요. 이 단계는 준비 중이에요.'} />
       <Container sx={{ mt: { xs: 4, md: 6 } }}>
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3, alignItems: 'stretch' }}>
           <Stack direction="row" spacing={3} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 2, bgcolor: ds.card, ...squircle(radius.card), p: { xs: 3, md: 4 } }}>
@@ -500,14 +512,16 @@ function ConfirmedView({ count, requiredCount, onDone, onReupload }) {
             sx={{ justifyContent: 'center', ...squircle(radius.card), background: ds.sky, p: { xs: 3, md: 4 } }}
           >
             <Typography variant="h3" component="p">
-              사전 정보 입력은 곧 열려요
+              {onNext ? '사전 정보를 입력하러 가요' : '다음 단계(사전 정보)는 준비 중이에요'}
             </Typography>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-              <Button variant="contained" color="secondary" size="large" onClick={onDone}>
-                처음으로
-              </Button>
-              <Button variant="outlined" size="large" onClick={onReupload}>
-                다른 서류 올리기
+              {onNext && (
+                <Button variant="contained" size="large" onClick={onNext}>
+                  사전 정보 입력하기
+                </Button>
+              )}
+              <Button variant={onNext ? 'outlined' : 'contained'} color={onNext ? 'inherit' : 'secondary'} size="large" onClick={onDone}>
+                내 작성 목록 보기
               </Button>
             </Stack>
           </Stack>

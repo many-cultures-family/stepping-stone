@@ -8,6 +8,7 @@
 //   5 : 서술형 칸이 없다 (빈 화면)
 //   6 : 서버 연결 실패 (NETWORK_ERROR)
 import { ApiError } from '../api/client.js'
+import { updateDraft } from './drafts.js'
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -73,4 +74,11 @@ export async function requestReview(draftId) {
 export async function decideSuggestion(draftId, suggestionId, decision) {
   await delay(150)
   return { id: suggestionId, decision }
+}
+
+/** 검토 마치기 → 완성본 확정(성공). 작성 목록 목에도 반영한다 */
+export async function finishReview(draftId) {
+  await delay(400)
+  updateDraft(draftId, { status: '성공', step: 'review' })
+  return { id: Number(draftId), status: '성공' }
 }

@@ -67,3 +67,17 @@ export async function cancelDraft(draftId) {
   d.status = '취소'
   return { id: d.id, status: '취소' }
 }
+
+/** 업로드한 작성 건을 목록에 더한다 (mocks/documents.js 가 부른다) */
+export function addDraft(patch = {}) {
+  const id = drafts.reduce((m, d) => Math.max(m, d.id), 0) + 1
+  const d = { id, status: '수정', step: 'upload', reject_reason: null, submitted_at: null, ...patch }
+  drafts.push(d)
+  return d
+}
+
+/** 다른 목이 단계·상태를 바꿨을 때 목록에도 반영한다 (항목 확정, 사전 정보 저장, 검토 마치기) */
+export function updateDraft(draftId, patch) {
+  const d = drafts.find((x) => x.id === Number(draftId))
+  if (d) Object.assign(d, patch)
+}
