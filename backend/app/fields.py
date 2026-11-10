@@ -184,10 +184,10 @@ def infer_fields(draft_id: int, body: InferRequest | None = None):
         masked_text = (document["masked_text"] if document else None) or ""
         if not masked_text.strip():
             # OCR이 아직 안 됐거나 실패한 작성 건(DATA-MODEL.md "인식 실패면 비어 있다",
-            # R1 반려 OCR_FAILED 대상)이다. 빈 텍스트로 L1을 부르면 없는 항목을
-            # 지어내므로 호출 전에 막는다. 전용 오류 코드는 팀이 아직 정하지 않아
-            # 우선 LLM_CALL_FAILED로 묶는다 (F-02 리뷰)
-            raise HTTPException(status_code=502, detail={"code": "LLM_CALL_FAILED"})
+            # R1 반려 OCR_FAILED 대상)이다. L1을 부른 게 아니라 아예 부르지 않은
+            # 것이므로 502(LLM_CALL_FAILED)가 아니라 다른 409 코드들과 같은 계열로
+            # 상태 충돌을 명시한다 (F-02 리뷰)
+            raise HTTPException(status_code=409, detail={"code": "DOCUMENT_NOT_READY"})
 
         try:
             llm_fields = llm.infer_fields(

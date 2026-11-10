@@ -163,8 +163,8 @@ def test_us03_infer_rejects_empty_masked_text_without_calling_llm(
 
     res = infer(client, draft_id)
 
-    assert res.status_code == 502
-    assert res.json() == {"detail": {"code": "LLM_CALL_FAILED"}}
+    assert res.status_code == 409
+    assert res.json() == {"detail": {"code": "DOCUMENT_NOT_READY"}}
 
 
 # F-02 리뷰: 동시 호출 레이스 — L1이 끝나는 사이 다른 요청이 먼저 저장했다면 중복 저장하지 않는다
