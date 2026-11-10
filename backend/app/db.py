@@ -10,12 +10,18 @@ SEED_GOOGLE_SUB = "test-sub-0001"
 SEED_EMAIL = "tester@example.com"
 SEED_LANGUAGE = "vi"
 
-# input_format 허용 목록 중 서버가 미리 채워 두는 예시 (DATA-MODEL.md 시드 데이터 1번)
+# input_format = R2 허용 목록의 단일 출처. DATA-MODEL.md의 9종을 모두 채운다
+# (F-02 리뷰 — 허용 목록을 코드 상수와 DB에 각각 두면 어긋난다. 이 테이블이 유일한 출처다)
 SEED_INPUT_FORMATS = [
     ("phone", "전화번호", r"^010-\d{4}-\d{4}$", "010-0000-0000"),
     ("date", "날짜", r"^\d{4}\.\d{2}\.\d{2}$", "YYYY.MM.DD"),
+    ("email", "이메일", r"^[^@\s]+@[^@\s]+\.[^@\s]+$", "example@email.com"),
+    ("number", "숫자", r"^\d+$", "123"),
     ("name", "이름", r"^.{1,50}$", "홍길동"),
+    ("address", "주소", r"^.{1,200}$", "○○시 ○○구 ○○로 00"),
+    ("short_text", "짧은 글", r"^.{1,100}$", "간단히 입력"),
     ("long_text", "서술형", None, "자유롭게 작성"),
+    ("choice", "선택형", None, "보기 중 선택"),
 ]
 
 # 시드 사용자의 사전 정보 (DATA-MODEL.md 시드 데이터 2번, 가짜 값)
