@@ -1,5 +1,4 @@
 // 작성 목록·제출 완료·취소 API (F-08, US-06·US-07). 기준: docs/api/DRAFT-STATUS-API.md (경로·응답 모양 그대로, 모두 [제안]).
-// 서버 구현은 PR #14(feat/f08-draft-status-schema)에 있다. VITE_USE_MOCK=true 에서는 src/mocks/drafts.js 가 명세 예시대로 응답한다.
 import { request, USE_MOCK } from './client.js'
 import * as mock from '../mocks/drafts.js'
 

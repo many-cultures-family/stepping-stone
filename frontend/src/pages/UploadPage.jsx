@@ -63,6 +63,9 @@ export default function UploadPage() {
     }
   }
 
+  // 서버가 step 을 field_check 로 돌려줘야 항목 확인으로 갈 수 있다. 실서버는 글자 인식 단계가 없어 upload 에 머문다
+  const readyForFields = draft?.step === 'field_check'
+
   function goFieldCheck() {
     setPendingFile(draft.id, file)
     navigate(`/drafts/${draft.id}/fields`)
@@ -82,7 +85,9 @@ export default function UploadPage() {
         title={draft ? '문서를 올렸어요' : '신청서를 올려 주세요'}
         description={
           draft
-            ? '이제 AI가 찾은 입력 칸이 원본과 같은지 확인할 차례예요.'
+            ? readyForFields
+              ? '이제 AI가 찾은 입력 칸이 원본과 같은지 확인할 차례예요.'
+              : '글자 인식 단계는 준비 중이에요. 올린 문서는 내 작성 목록에서 볼 수 있어요.'
             : `${ALLOWED_TYPES_LABEL} 파일을 올리면 AI가 써야 할 칸을 찾아 드려요.`
         }
       />
@@ -98,14 +103,20 @@ export default function UploadPage() {
               <Typography variant="h3" component="p" sx={{ pt: 1 }}>
                 {file?.name}
               </Typography>
-              <Pill tone="soft">작성 건 {draft.id} · 업로드됨</Pill>
+              <Pill tone="soft">작성 건 {draft.id} · {readyForFields ? '항목 확인 단계' : '업로드됨'}</Pill>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ pt: 3, width: { xs: '100%', sm: 'auto' } }}>
                 <Button variant="outlined" size="large" onClick={handleReset}>
                   다른 파일 올리기
                 </Button>
-                <Button variant="contained" size="large" onClick={goFieldCheck}>
-                  입력 항목 확인하기
-                </Button>
+                {readyForFields ? (
+                  <Button variant="contained" size="large" onClick={goFieldCheck}>
+                    입력 항목 확인하기
+                  </Button>
+                ) : (
+                  <Button variant="contained" size="large" onClick={() => navigate('/drafts')}>
+                    내 작성 목록 보기
+                  </Button>
+                )}
               </Stack>
             </Stack>
           ) : (

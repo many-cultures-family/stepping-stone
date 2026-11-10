@@ -2,6 +2,7 @@
 // 응답 모양은 docs/api/FIELD-CHECK-API.md "입력·출력 예시"를 그대로 옮겼다 (계약 일치 검사 역할).
 // 실제 개인정보는 쓰지 않는다. bbox 는 DocumentPreview 의 샘플 서식과 위치를 맞췄다.
 import { ApiError } from '../api/client.js'
+import { updateDraft } from './drafts.js'
 import { REANALYSIS_LIMIT } from '../api/limits.js'
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -127,6 +128,7 @@ export async function confirmFields(draftId) {
   if (errors.length) {
     throw new ApiError('FIELDS_INVALID', { status: 400, code: 'FIELDS_INVALID', errors })
   }
+  updateDraft(draftId, { step: 'prior_info' })
   s.draft = { ...s.draft, step: 'prior_info', fields_confirmed_at: new Date().toISOString().replace(/\.\d+Z$/, 'Z') }
   return { draft: { id: s.draft.id, status: s.draft.status, step: s.draft.step, fields_confirmed_at: s.draft.fields_confirmed_at } }
 }

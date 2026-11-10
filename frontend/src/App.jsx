@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Alert, Box, CircularProgress } from '@mui/material'
+import { USE_MOCK } from './api/client.js'
+import { finishReview } from './api/review.js'
+import { startWriting } from './api/priorInfo.js'
 import { AuthProvider } from './auth/AuthContext.jsx'
+import { LOGIN_ERROR_MESSAGES } from './auth/loginErrors.js'
 import { useAuth } from './auth/useAuth.js'
 import Layout from './components/Layout.jsx'
 import LoginRequired from './components/LoginRequired.jsx'
@@ -13,18 +17,11 @@ import LandingPage from './pages/LandingPage.jsx'
 import PriorInfoPage from './pages/PriorInfoPage.jsx'
 import UploadPage from './pages/UploadPage.jsx'
 import { useAnswerReview } from './hooks/useAnswerReview.js'
+import { usePriorInfo } from './hooks/usePriorInfo.js'
 import { getPendingFile, matchRoute, navigate, usePath } from './router.js'
 
-// LOGIN-API.md 항목 2 실패 응답: /?login_error=<코드>로 돌아온다.
-const LOGIN_ERROR_MESSAGES = {
-  GOOGLE_LOGIN_CANCELED: '로그인을 취소했어요.',
-  GOOGLE_EMAIL_NOT_VERIFIED: '이메일 인증이 안 된 구글 계정이에요.',
-  GOOGLE_LOGIN_FAILED: '로그인 중 문제가 생겼어요. 다시 시도해 주세요.',
-}
-
+// LOGIN-API.md 항목 2 실패 응답은 /?login_error=<코드>로 돌아온다. 문구 표는 auth/loginErrors.js 에 있다.
 // /  랜딩 · /upload  서류 올리기(US-01) · /drafts  내 작성 목록(F-08, US-06·US-07) · /drafts/:id/fields  입력 항목 확인(F-02, US-02·US-03)
-// /drafts/:id/prior-info  사전 정보 입력 · /prior-info  내 사전 정보 관리 (F-03, US-04)
-// /drafts/:id/review  서술형 답변 검토(F-06, US-05)
 function AppContent() {
   const route = matchRoute(usePath())
   const { status, user } = useAuth()
@@ -57,7 +54,7 @@ function AppContent() {
       {route.name === 'upload' && status === 'authenticated' && <UploadPage />}
       {route.name === 'upload' && status === 'anonymous' && (
         <Container sx={{ py: 6 }}>
-          <LoginRequired />
+          <LoginRequired message="로그인한 뒤 문서를 올릴 수 있어요." />
         </Container>
       )}
       {route.name === 'drafts' && <DraftListPage />}
@@ -66,30 +63,22 @@ function AppContent() {
           key={route.params.draftId}
           draftId={route.params.draftId}
           file={getPendingFile(route.params.draftId)}
-          onDone={() => navigate('/')}
+          onDone={() => navigate('/drafts')}
+          onNext={USE_MOCK ? () => navigate(`/drafts/${route.params.draftId}/prior-info`) : undefined}
           onReupload={() => navigate('/upload')}
         />
       )}
       {/* F-03 API 명세가 아직 없어 저장된 사전 정보·저장 동작을 연결하지 않았다.
           명세가 나오면 여기서 savedInfo·status·serverErrors·onSave·onStartWriting 을 넘기고,
           작성 건 모드의 requiredKeys 는 이 작성 건 fields 의 prior_info_key 목록으로 바꾼다. */}
-      {route.name === 'prior-info' && status === 'authenticated' && (
-        <PriorInfoPage
-          key={route.params.draftId ?? 'manage'}
-          language={user?.language}
-          requiredKeys={route.params.draftId ? PRIOR_INFO_KEYS : undefined}
-          onBack={() => navigate(route.params.draftId ? `/drafts/${route.params.draftId}/fields` : '/')}
-        />
+      {/* 사전 정보·답변 검토는 서버 API가 아직 없어 목(VITE_USE_MOCK=true)에서만 연다 */}
+      {USE_MOCK && route.name === 'prior-info' && status === 'authenticated' && (
+        <PriorInfoRoute key={route.params.draftId ?? 'manage'} draftId={route.params.draftId} language={user?.language} />
       )}
-      {route.name === 'prior-info' && status === 'anonymous' && (
-        <Container sx={{ py: 6 }}>
-          <LoginRequired />
-        </Container>
-      )}
-      {route.name === 'review' && status === 'authenticated' && (
+      {USE_MOCK && route.name === 'review' && status === 'authenticated' && (
         <AnswerReviewRoute key={route.params.draftId} draftId={route.params.draftId} />
       )}
-      {route.name === 'review' && status === 'anonymous' && (
+      {USE_MOCK && (route.name === 'prior-info' || route.name === 'review') && status === 'anonymous' && (
         <Container sx={{ py: 6 }}>
           <LoginRequired />
         </Container>
@@ -98,17 +87,31 @@ function AppContent() {
   )
 }
 
-// F-06 서술형 답변 검토. 데이터·검토 요청은 api/review.js(명세 전이라 [제안])를 거친다.
-// '검토 마치기'(onFinish)는 단계 전이 API 가 정해질 때까지 연결하지 않아 버튼이 막혀 있다.
+// F-03 사전 정보 입력·관리. 데이터·저장은 api/priorInfo.js(목 전용)를 거친다.
+function PriorInfoRoute({ draftId, language }) {
+  const { loaded, savedInfo, status, errorCode, save, retry } = usePriorInfo()
+  if (!loaded) return <Loading />
+  return (
+    <PriorInfoPage
+      // 저장하면 저장된 값이 바뀌므로 key 를 바꿔 화면을 새로 그린다(PriorInfoPage 주석)
+      key={JSON.stringify(savedInfo)}
+      language={language}
+      savedInfo={savedInfo}
+      requiredKeys={draftId ? PRIOR_INFO_KEYS : undefined}
+      status={status}
+      errorCode={errorCode}
+      onSave={save}
+      onRetry={retry}
+      onStartWriting={draftId ? () => startWritingAndGo(draftId) : undefined}
+      onBack={() => navigate(draftId ? `/drafts/${draftId}/fields` : '/drafts')}
+    />
+  )
+}
+
+// F-06 서술형 답변 검토. 데이터·검토 요청은 api/review.js(명세 전이라 [제안], 목 전용)를 거친다.
 function AnswerReviewRoute({ draftId }) {
   const { loaded, answers, suggestions, reviewStatus, errorCode, request, decide } = useAnswerReview(draftId)
-  if (!loaded) {
-    return (
-      <Box sx={{ py: 10, display: 'grid', placeItems: 'center' }}>
-        <CircularProgress aria-label="불러오는 중" />
-      </Box>
-    )
-  }
+  if (!loaded) return <Loading />
   return (
     <AnswerReviewPage
       answers={answers}
@@ -117,9 +120,22 @@ function AnswerReviewRoute({ draftId }) {
       errorCode={errorCode}
       onRequestReview={request}
       onDecide={decide}
-      onBack={() => navigate(`/drafts/${draftId}/write`)}
+      onFinish={() => finishReview(draftId).then(() => navigate('/drafts'))}
+      onBack={() => navigate('/drafts')}
     />
   )
+}
+
+function Loading() {
+  return (
+    <Box sx={{ py: 10, display: 'grid', placeItems: 'center' }}>
+      <CircularProgress aria-label="불러오는 중" />
+    </Box>
+  )
+}
+
+function startWritingAndGo(draftId) {
+  return startWriting(draftId).then(() => navigate('/drafts'))
 }
 
 export default function App() {

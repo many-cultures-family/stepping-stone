@@ -32,3 +32,9 @@ export function decideSuggestion(draftId, suggestionId, decision) {
   if (USE_MOCK) return mock.decideSuggestion(draftId, suggestionId, decision)
   return request(`/drafts/${draftId}/review/suggestions/${suggestionId}`, { method: 'PATCH', body: { decision } })
 }
+
+/** 검토 마치기 [목 전용] 단계 전이(review → 성공) API 는 아직 없다. 목에서만 작성 목록에 반영한다 */
+export function finishReview(draftId) {
+  if (!USE_MOCK) return Promise.reject(new Error('검토 마치기 API는 아직 없어요'))
+  return mock.finishReview(draftId)
+}
