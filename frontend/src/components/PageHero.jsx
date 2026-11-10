@@ -9,11 +9,12 @@ export default function PageHero({ step = 0, overline, title, description, aside
   return (
     <Container sx={{ px: { xs: 1, sm: 1.5, md: 2 }, pt: { xs: 1, md: 1.5 } }}>
       <Box sx={{ ...squircleResponsive({ xs: 24, md: radius.hero }), background: ds.sky, px: { xs: 2.5, sm: 4, md: 7 }, py: { xs: 3.5, md: 6 } }}>
-        <Stepper current={step} />
+        {/* step={null}: 작성 흐름 밖의 화면(예: 내 사전 정보 관리)이라 진행 단계를 숨긴다 */}
+        {step !== null && <Stepper current={step} />}
         <Stack
           direction={{ xs: 'column', md: 'row' }}
           spacing={3}
-          sx={{ mt: { xs: 3.5, md: 5 }, justifyContent: 'space-between', alignItems: { md: 'flex-end' } }}
+          sx={{ mt: step !== null ? { xs: 3.5, md: 5 } : 0,justifyContent: 'space-between', alignItems: { md: 'flex-end' } }}
         >
           <Box sx={{ maxWidth: 680, minWidth: 0 }}>
             {overline && (

@@ -5,8 +5,10 @@ import { useAuth } from './auth/useAuth.js'
 import Layout from './components/Layout.jsx'
 import LoginRequired from './components/LoginRequired.jsx'
 import { Container } from './components/ui.jsx'
+import { PRIOR_INFO_KEYS } from './i18n/priorInfo.js'
 import FieldCheckPage from './pages/FieldCheckPage.jsx'
 import LandingPage from './pages/LandingPage.jsx'
+import PriorInfoPage from './pages/PriorInfoPage.jsx'
 import UploadPage from './pages/UploadPage.jsx'
 import { getPendingFile, matchRoute, navigate, usePath } from './router.js'
 
@@ -18,9 +20,10 @@ const LOGIN_ERROR_MESSAGES = {
 }
 
 // /  랜딩 · /upload  서류 올리기(US-01) · /drafts/:id/fields  입력 항목 확인(F-02, US-02·US-03)
+// /drafts/:id/prior-info  사전 정보 입력 · /prior-info  내 사전 정보 관리 (F-03, US-04)
 function AppContent() {
   const route = matchRoute(usePath())
-  const { status } = useAuth()
+  const { status, user } = useAuth()
   // 쿼리의 login_error를 초기값으로만 읽는다(처음 렌더에서 한 번). 쿼리 자체를 지우는 건
   // React 상태와 무관한 브라우저 URL 조작이라 아래 effect에서 따로 한다.
   const [loginError, setLoginError] = useState(() => {
@@ -61,6 +64,22 @@ function AppContent() {
           onDone={() => navigate('/')}
           onReupload={() => navigate('/upload')}
         />
+      )}
+      {/* F-03 API 명세가 아직 없어 저장된 사전 정보·저장 동작을 연결하지 않았다.
+          명세가 나오면 여기서 savedInfo·status·serverErrors·onSave·onStartWriting 을 넘기고,
+          작성 건 모드의 requiredKeys 는 이 작성 건 fields 의 prior_info_key 목록으로 바꾼다. */}
+      {route.name === 'prior-info' && status === 'authenticated' && (
+        <PriorInfoPage
+          key={route.params.draftId ?? 'manage'}
+          language={user?.language}
+          requiredKeys={route.params.draftId ? PRIOR_INFO_KEYS : undefined}
+          onBack={() => navigate(route.params.draftId ? `/drafts/${route.params.draftId}/fields` : '/')}
+        />
+      )}
+      {route.name === 'prior-info' && status === 'anonymous' && (
+        <Container sx={{ py: 6 }}>
+          <LoginRequired />
+        </Container>
       )}
     </Layout>
   )
