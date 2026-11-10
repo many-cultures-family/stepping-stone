@@ -2,7 +2,7 @@ import { Box, Stack, Typography } from '@mui/material'
 import { ds, radius, squircle, squircleResponsive } from '../theme.js'
 import { Container } from './ui.jsx'
 
-const STEPS = ['서류 올리기', '입력 항목 확인', '사전 정보 입력']
+const STEPS = ['서류 올리기', '입력 항목 확인', '사전 정보 입력', '가상 작성']
 
 // 작업 화면 상단의 하늘색 띠 (랜딩 히어로를 낮게 줄인 형태) + 진행 단계 표시
 export default function PageHero({ step = 0, overline, title, description, aside, children }) {
