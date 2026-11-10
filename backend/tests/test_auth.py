@@ -1,8 +1,10 @@
 # 로그인 API (docs/api/LOGIN-API.md 항목 1~5). Google은 실제로 부르지 않는다
+import threading
 from urllib.parse import parse_qs, urlparse
 
 import pytest
 from conftest import CALLBACK_PATH, count_rows
+from fastapi.testclient import TestClient
 
 from app import auth
 
@@ -36,6 +38,56 @@ def session_cookie_header(res):
         v
         for k, v in res.headers.multi_items()
         if k == "set-cookie" and v.startswith("didimdol_session=")
+    )
+
+
+# 항목 2 콜백: 처음 로그인하는 사용자의 콜백이 동시에 두 번 오는 경우
+def test_callback_first_login_twice_at_once_makes_one_user(
+    anon_client, db, monkeypatch
+):
+    barrier = threading.Barrier(2, timeout=5)
+    real_pick_language = auth.pick_language
+
+    def synced_pick_language(accept_language):
+        # 두 요청이 모두 '아직 없는 사용자'를 본 뒤에 같이 저장 단계로 들어가게 맞춘다
+        try:
+            barrier.wait()
+        except threading.BrokenBarrierError:
+            pass
+        return real_pick_language(accept_language)
+
+    async def fake_fetch(request, client_id, client_secret):
+        return NEW_USERINFO
+
+    monkeypatch.setattr(auth, "pick_language", synced_pick_language)
+    monkeypatch.setattr(auth, "fetch_google_userinfo", fake_fetch)
+
+    results = []
+
+    def callback():
+        try:
+            with TestClient(anon_client.app) as c:
+                res = c.get(
+                    CALLBACK_PATH,
+                    params={"code": "fake-code", "state": "fake-state"},
+                    follow_redirects=False,
+                )
+            results.append((res.status_code, res.headers.get("location")))
+        except Exception as exc:  # noqa: BLE001 - 500은 TestClient가 예외로 올린다. 원인 그대로 기록
+            results.append(("error", repr(exc)))
+
+    threads = [threading.Thread(target=callback) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert results == [(302, "/"), (302, "/")]
+    assert (
+        db.execute(
+            "SELECT COUNT(*) FROM user WHERE google_sub = ?", (NEW_USERINFO["sub"],)
+        ).fetchone()[0]
+        == 1
     )
 
 

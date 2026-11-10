@@ -1,5 +1,5 @@
 // 아주 작은 경로 처리 (합의된 의존성을 지키려고 react-router 를 넣지 않음)
-// 경로: /  랜딩 · /upload  서류 올리기 · /drafts  내 작성 목록 · /drafts/:id/fields  입력 항목 확인
+// 경로: /  랜딩 · /upload  서류 올리기 · /drafts  내 작성 목록 · /drafts/:id/fields  입력 항목 확인 · /drafts/:id/review  서술형 검토
 //       /drafts/:id/prior-info  사전 정보 입력 · /prior-info  내 사전 정보 관리
 import { useSyncExternalStore } from 'react'
 
@@ -34,6 +34,8 @@ export function matchRoute(path) {
   const p = path.match(/^\/drafts\/(\d+)\/prior-info\/?$/)
   if (p) return { name: 'prior-info', params: { draftId: Number(p[1]) } }
   if (/^\/prior-info\/?$/.test(path)) return { name: 'prior-info', params: {} }
+  const r = path.match(/^\/drafts\/(\d+)\/review\/?$/)
+  if (r) return { name: 'review', params: { draftId: Number(r[1]) } }
   return { name: 'landing', params: {} }
 }
 

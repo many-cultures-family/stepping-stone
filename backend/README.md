@@ -38,9 +38,14 @@ pip install -r requirements.txt
 
 FastAPI 앱 객체 `app`은 `backend/app/main.py`에 있습니다.
 
+서버는 `.env` 파일을 스스로 읽지 않으므로, 켜기 전에 셸에서 불러옵니다. 값을 비워 둔 줄(`KEY=`)은 건너뛰어서 기본값을 씁니다.
+
 ```bash
+set -a; source <(grep -vE '^[[:space:]]*(#|$)|=[[:space:]]*$' .env); set +a
 uvicorn app.main:app --reload --port 8080
 ```
+
+`uvicorn --env-file .env`는 쓰지 않습니다. `python-dotenv`가 필요한데 `requirements.txt`에 없고, 빈 값을 기본값 대신 빈 문자열로 넘깁니다.
 
 ### 5. API 문서 확인
 

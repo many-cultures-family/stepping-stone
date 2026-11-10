@@ -77,6 +77,7 @@ cp backend/.env.example backend/.env
 ```
 
 `backend/.env`에는 각자 값을 채운다. 이 파일은 커밋하지 않는다.
+**서버는 `.env` 파일을 스스로 읽지 않는다.** 아래 "터미널 1"처럼 서버를 켜기 전에 셸에서 `.env`를 불러와야 값이 적용된다.
 
 3. 화면 라이브러리 설치와 환경 변수 파일 복사. 실서버에 붙이려면 `frontend/.env.local`에서 `VITE_USE_MOCK=false`로 바꾼다.
 
@@ -92,8 +93,12 @@ cd ..
 ```bash
 cd backend
 source .venv/bin/activate
+set -a; source <(grep -vE '^[[:space:]]*(#|$)|=[[:space:]]*$' .env); set +a
 uvicorn app.main:app --reload --port 8080
 ```
+
+- 세 번째 줄이 `.env`를 불러온다. 값을 비워 둔 줄(`KEY=`)은 건너뛰어서, 비운 항목은 기본값을 쓴다. `uvicorn --env-file .env`는 쓰지 않는다. `python-dotenv`가 필요한데 `requirements.txt`에 없고, 빈 값을 기본값 대신 빈 문자열로 넘기기 때문이다.
+- macOS 기본 셸(zsh)에서 확인했다. `.env`를 고친 뒤에는 서버를 다시 켜야 한다.
 
 `http://localhost:8080/api/health`가 `{"status": "ok"}`를 돌려주면 정상. API 문서는 `http://localhost:8080/docs`.
 
