@@ -182,9 +182,6 @@ def infer_fields(
                     status_code=409, detail={"code": "REANALYSIS_LIMIT_EXCEEDED"}
                 )
 
-        user = conn.execute(
-            "SELECT language FROM user WHERE id = ?", (draft["user_id"],)
-        ).fetchone()
         document = conn.execute(
             "SELECT masked_text FROM document WHERE draft_id = ?", (draft_id,)
         ).fetchone()
@@ -192,9 +189,8 @@ def infer_fields(
         if not masked_text.strip():
             # OCR이 아직 안 됐거나 실패한 작성 건(DATA-MODEL.md "인식 실패면 비어 있다",
             # R1 반려 OCR_FAILED 대상)이다. 빈 텍스트로 L1을 부르면 없는 항목을
-            # 지어내므로 호출 전에 막는다. 전용 오류 코드는 팀이 아직 정하지 않아
-            # 우선 LLM_CALL_FAILED로 묶는다 (F-02 리뷰)
-            raise HTTPException(status_code=502, detail={"code": "LLM_CALL_FAILED"})
+            # 지어내므로 호출 전에 막는다. 팀 확정: 422 DOCUMENT_NOT_READY
+            raise HTTPException(status_code=422, detail={"code": "DOCUMENT_NOT_READY"})
 
         try:
             llm_fields = llm.infer_fields(
