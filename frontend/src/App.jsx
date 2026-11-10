@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
-import { Alert } from '@mui/material'
+import { Alert, Box, CircularProgress } from '@mui/material'
 import { AuthProvider } from './auth/AuthContext.jsx'
 import { useAuth } from './auth/useAuth.js'
 import Layout from './components/Layout.jsx'
 import LoginRequired from './components/LoginRequired.jsx'
 import { Container } from './components/ui.jsx'
+import AnswerReviewPage from './pages/AnswerReviewPage.jsx'
 import DraftListPage from './pages/DraftListPage.jsx'
 import FieldCheckPage from './pages/FieldCheckPage.jsx'
 import LandingPage from './pages/LandingPage.jsx'
 import UploadPage from './pages/UploadPage.jsx'
+import { useAnswerReview } from './hooks/useAnswerReview.js'
 import { getPendingFile, matchRoute, navigate, usePath } from './router.js'
 
 // LOGIN-API.md 항목 2 실패 응답: /?login_error=<코드>로 돌아온다.
@@ -19,6 +21,7 @@ const LOGIN_ERROR_MESSAGES = {
 }
 
 // /  랜딩 · /upload  서류 올리기(US-01) · /drafts  내 작성 목록(F-08, US-06·US-07) · /drafts/:id/fields  입력 항목 확인(F-02, US-02·US-03)
+// /drafts/:id/review  서술형 답변 검토(F-06, US-05)
 function AppContent() {
   const route = matchRoute(usePath())
   const { status } = useAuth()
@@ -64,7 +67,39 @@ function AppContent() {
           onReupload={() => navigate('/upload')}
         />
       )}
+      {route.name === 'review' && status === 'authenticated' && (
+        <AnswerReviewRoute key={route.params.draftId} draftId={route.params.draftId} />
+      )}
+      {route.name === 'review' && status === 'anonymous' && (
+        <Container sx={{ py: 6 }}>
+          <LoginRequired />
+        </Container>
+      )}
     </Layout>
+  )
+}
+
+// F-06 서술형 답변 검토. 데이터·검토 요청은 api/review.js(명세 전이라 [제안])를 거친다.
+// '검토 마치기'(onFinish)는 단계 전이 API 가 정해질 때까지 연결하지 않아 버튼이 막혀 있다.
+function AnswerReviewRoute({ draftId }) {
+  const { loaded, answers, suggestions, reviewStatus, errorCode, request, decide } = useAnswerReview(draftId)
+  if (!loaded) {
+    return (
+      <Box sx={{ py: 10, display: 'grid', placeItems: 'center' }}>
+        <CircularProgress aria-label="불러오는 중" />
+      </Box>
+    )
+  }
+  return (
+    <AnswerReviewPage
+      answers={answers}
+      suggestions={suggestions}
+      reviewStatus={reviewStatus}
+      errorCode={errorCode}
+      onRequestReview={request}
+      onDecide={decide}
+      onBack={() => navigate(`/drafts/${draftId}/write`)}
+    />
   )
 }
 
