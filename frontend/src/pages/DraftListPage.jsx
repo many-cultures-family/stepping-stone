@@ -49,6 +49,8 @@ const REJECT_TEXT = {
 // - 제출완료: status=성공, 제출 기록 있음 (next_action DONE)
 // - 취소: 서버 목록에는 안 나온다(DRAFT-STATUS-API.md 항목 1). 이 화면에서 방금 취소한 건만 보여 준다
 // - 반려는 '전체'에만 나온다
+// 탭은 여러 개지만 패널은 하나(내용만 바뀜). 모든 탭이 이 패널 하나를 가리킨다
+const PANEL_ID = 'drafts-panel'
 const TABS = [
   { key: 'all', label: '전체' },
   { key: 'writing', label: '작성중' },
@@ -90,14 +92,19 @@ function progressIndex(d) {
 }
 
 // next_action → '다음 할 일' 문구와 이동 경로 (DRAFT-STATUS-API.md 항목 1 표).
-// 아직 화면이 없는 단계(사전 정보, 검토)는 안내만 하고 버튼을 두지 않는다.
+// 버튼은 실제 서버에서 그 화면이 열리는 경우에만 둔다. 막다른 길이면 안내 문구만 보여 준다.
+// - PRIOR_INFO·REVIEW: 화면이 아직 없다
+// - UPLOAD: 서버에 upload → field_check 전이가 없어 /fields 로 가면 409 DRAFT_STEP_INVALID 에 막힌다
+// - REJECTED: 같은 작성 건에 다시 올리는 API가 없다(DATA-MODEL.md 는 같은 건의 문서를 바꾼다고 적음).
+//   /upload 로 보내면 새 작성 건이 생기고 반려 건은 목록에 그대로 남는다
+// 단계 전이·재업로드 담당이 정해지면 cta·to 를 다시 붙인다.
 const NEXT_ACTION = {
-  UPLOAD: { title: '입력 항목을 찾아 주세요', body: '올린 문서에서 적어야 할 칸을 찾아요.', cta: '입력 항목 찾기', to: (id) => `/drafts/${id}/fields` },
+  UPLOAD: { title: '입력 항목 찾기를 기다리고 있어요', body: '올린 문서에서 적어야 할 칸을 찾는 다음 단계는 준비 중이에요.' },
   FIELD_CHECK: { title: '입력 항목을 확인해 주세요', body: 'AI가 찾은 칸이 원본과 같은지 확인해요.', cta: '입력 항목 확인하기', to: (id) => `/drafts/${id}/fields` },
   PRIOR_INFO: { title: '사전 정보를 입력해 주세요', body: '이름·생년월일처럼 자주 쓰는 정보를 먼저 저장해요. (화면 준비 중)' },
   WRITING: { title: '가상 작성을 이어서 해 주세요', body: '실제 신청서와 같은 모양에서 미리 적어 봐요.', cta: '가상 작성 이어하기', to: (id) => `/drafts/${id}/write` },
   REVIEW: { title: '작성한 내용을 검토해 주세요', body: '빠진 칸과 틀린 형식이 없는지 마지막으로 확인해요. (화면 준비 중)' },
-  REJECTED: { title: '서류를 다시 올려 주세요', body: '', cta: '서류 다시 올리기', to: () => '/upload' },
+  REJECTED: { title: '이 작성 건은 더 진행할 수 없어요', body: '' },
   SUBMIT: { title: '공식 사이트에서 직접 제출해 주세요', body: "제출을 마쳤다면 '제출 완료'를 눌러 기록을 남겨요. 디딤돌은 기관에 아무것도 보내지 않아요." },
   DONE: { title: '할 일을 모두 마쳤어요', body: '제출 기록이 남아 있어요.' },
 }
@@ -126,7 +133,8 @@ export default function DraftListPage() {
   const [drafts, setDrafts] = useState([])
   const [canceled, setCanceled] = useState([]) // 이 화면에서 취소한 건 (서버 목록에는 없음)
   const [tab, setTab] = useState('all')
-  const [ask, setAsk] = useState(null) // { type: 'submit' | 'cancel', draft }
+  const [ask, setAsk] = useState(null) // { type: 'submit' | 'cancel', draft, open }. 닫혀도 내용은 남겨 닫히는 동안 문구가 안 바뀐다
+  const closeAsk = () => setAsk((a) => (a ? { ...a, open: false } : a))
   const [busyId, setBusyId] = useState(null)
   const [toast, setToast] = useState(null)
 
@@ -176,9 +184,9 @@ export default function DraftListPage() {
   }, [tab, drafts, canceled])
 
   async function handleConfirm() {
-    if (!ask) return
+    if (!ask?.open) return
     const { type, draft } = ask
-    setAsk(null)
+    closeAsk()
     setBusyId(draft.id)
     try {
       if (type === 'submit') {
@@ -192,7 +200,7 @@ export default function DraftListPage() {
         setDrafts((list) => list.filter((d) => d.id !== res.id))
         setCanceled((list) => [{ ...draft, status: res.status, next_action: null }, ...list.filter((d) => d.id !== res.id)])
         setTab('canceled')
-        setToast({ severity: 'success', text: '작성 건을 취소했어요.' })
+        setToast({ severity: 'success', text: draft.submitted_at ? '디딤돌에 남은 기록을 지웠어요.' : '작성 건을 취소했어요.' })
       }
     } catch (e) {
       if (e?.code === 'LOGIN_REQUIRED') setLoggedOut()
@@ -203,6 +211,8 @@ export default function DraftListPage() {
       setBusyId(null)
     }
   }
+
+  const askSubmitted = Boolean(ask?.draft?.submitted_at)
 
   const hero = (
     <PageHero
@@ -236,7 +246,7 @@ export default function DraftListPage() {
           </Typography>
         )}
 
-        <Box role="tabpanel" id={`drafts-panel-${tab}`} aria-labelledby={`drafts-tab-${tab}`} sx={{ mt: 3 }}>
+        <Box role="tabpanel" id={PANEL_ID} aria-labelledby={`drafts-tab-${tab}`} sx={{ mt: 3 }}>
           {(loadState.status === 'loading' || authStatus !== 'authenticated') && (
             <Stack spacing={2} aria-busy="true" aria-label="불러오는 중">
               {[0, 1, 2].map((i) => (
@@ -268,8 +278,8 @@ export default function DraftListPage() {
                   key={d.id}
                   draft={d}
                   busy={busyId === d.id}
-                  onSubmit={() => setAsk({ type: 'submit', draft: d })}
-                  onCancel={() => setAsk({ type: 'cancel', draft: d })}
+                  onSubmit={() => setAsk({ type: 'submit', draft: d, open: true })}
+                  onCancel={() => setAsk({ type: 'cancel', draft: d, open: true })}
                 />
               ))}
             </Stack>
@@ -277,7 +287,7 @@ export default function DraftListPage() {
         </Box>
       </Container>
 
-      <Dialog open={ask?.type === 'submit'} onClose={() => setAsk(null)} aria-labelledby="submit-title">
+      <Dialog open={Boolean(ask?.open && ask.type === 'submit')} onClose={closeAsk} aria-labelledby="submit-title">
         <DialogTitle id="submit-title">공식 사이트에서 제출을 마치셨나요?</DialogTitle>
         <DialogContent>
           <DialogContentText>
@@ -285,24 +295,28 @@ export default function DraftListPage() {
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setAsk(null)}>아직 안 했어요</Button>
+          <Button onClick={closeAsk}>아직 안 했어요</Button>
           <Button variant="contained" onClick={handleConfirm}>
             제출 완료로 기록
           </Button>
         </DialogActions>
       </Dialog>
 
-      <Dialog open={ask?.type === 'cancel'} onClose={() => setAsk(null)} aria-labelledby="cancel-title">
-        <DialogTitle id="cancel-title">이 작성 건을 취소할까요?</DialogTitle>
+      {/* 제출 기록이 있는 건의 취소는 실제 신청 취소가 아니라 디딤돌에 남은 연습 데이터 삭제다 (#109).
+          제출 후 취소를 허용할지는 팀 투표 전이다 (DRAFT-STATUS-API.md 항목 3) */}
+      <Dialog open={Boolean(ask?.open && ask.type === 'cancel')} onClose={closeAsk} aria-labelledby="cancel-title">
+        <DialogTitle id="cancel-title">{askSubmitted ? '디딤돌에 남은 기록을 지울까요?' : '이 작성 건을 취소할까요?'}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            취소하면 되돌릴 수 없어요. 올린 문서와 입력한 값이 모두 지워져요. 저장해 둔 사전 정보는 그대로 남아요.
+            {askSubmitted
+              ? '공식 사이트의 신청은 취소되지 않아요. 디딤돌에 남은 문서와 입력값만 지워요. 지우면 되돌릴 수 없고, 저장해 둔 사전 정보는 그대로 남아요.'
+              : '취소하면 되돌릴 수 없어요. 올린 문서와 입력한 값이 모두 지워져요. 저장해 둔 사전 정보는 그대로 남아요.'}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setAsk(null)}>계속 작성할게요</Button>
+          <Button onClick={closeAsk}>{askSubmitted ? '그대로 둘게요' : '계속 작성할게요'}</Button>
           <Button variant="contained" color="error" onClick={handleConfirm}>
-            작성 건 취소
+            {askSubmitted ? '디딤돌 기록 지우기' : '작성 건 취소'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -327,11 +341,17 @@ export default function DraftListPage() {
 
 function FilterTabs({ tab, onChange, counts, disabled }) {
   function onKeyDown(e) {
-    // 좌우 화살표로 탭 이동 (WAI-ARIA tabs 패턴)
-    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
-    e.preventDefault()
+    // 좌우 화살표·Home·End 로 탭 이동 (WAI-ARIA tabs 패턴)
     const i = TABS.findIndex((t) => t.key === tab)
-    const next = TABS[(i + (e.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length]
+    const target = {
+      ArrowRight: (i + 1) % TABS.length,
+      ArrowLeft: (i + TABS.length - 1) % TABS.length,
+      Home: 0,
+      End: TABS.length - 1,
+    }[e.key]
+    if (target === undefined) return
+    e.preventDefault()
+    const next = TABS[target]
     onChange(next.key)
     document.getElementById(`drafts-tab-${next.key}`)?.focus()
   }
@@ -351,7 +371,7 @@ function FilterTabs({ tab, onChange, counts, disabled }) {
             id={`drafts-tab-${t.key}`}
             role="tab"
             aria-selected={on}
-            aria-controls={`drafts-panel-${t.key}`}
+            aria-controls={PANEL_ID}
             tabIndex={on ? 0 : -1}
             onClick={() => onChange(t.key)}
             sx={{
@@ -401,7 +421,10 @@ function DraftCard({ draft, busy, onSubmit, onCancel }) {
   const pill = CATEGORY_PILL[category]
   const isCanceled = category === 'canceled'
   const action = draft.next_action ? NEXT_ACTION[draft.next_action] : null
-  const body = draft.next_action === 'REJECTED' ? (REJECT_TEXT[draft.reject_reason] ?? '문서를 처리하지 못했어요.') : action?.body
+  const body =
+    draft.next_action === 'REJECTED'
+      ? `${REJECT_TEXT[draft.reject_reason] ?? '문서를 처리하지 못했어요.'} 같은 작성 건에 다시 올리는 기능은 준비 중이에요. 필요 없으면 이 작성 건을 취소해 주세요.`
+      : action?.body
   const titleId = `draft-${draft.id}-title`
 
   return (
@@ -410,10 +433,10 @@ function DraftCard({ draft, busy, onSubmit, onCancel }) {
       aria-labelledby={titleId}
       sx={{
         p: { xs: 2.5, md: 3.5 },
-        bgcolor: ds.white,
-        border: `1px solid ${ds.line}`,
+        // 취소 건은 투명도 대신 배경·테두리 색으로 약하게 보인다 (opacity 를 주면 text2·muted 글자가 4.5:1 아래로 떨어짐)
+        bgcolor: isCanceled ? ds.card : ds.white,
+        border: `1px ${isCanceled ? 'dashed' : 'solid'} ${isCanceled ? ds.lineStrong : ds.line}`,
         ...squircle(radius.card),
-        opacity: isCanceled ? 0.75 : 1,
       }}
     >
       <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 1 }}>
@@ -421,9 +444,17 @@ function DraftCard({ draft, busy, onSubmit, onCancel }) {
           <Typography id={titleId} component="h2" sx={{ fontSize: 18, fontWeight: 700 }}>
             작성 건 #{draft.id}
           </Typography>
-          <Pill tone={pill.tone} size="sm">
-            {pill.label}
-          </Pill>
+          {category === 'submitted' ? (
+            // 초록 글자(green/greenSoft 3.03:1)는 글자 대비 미달 → 글자는 ink, 초록은 아이콘에만 (#13과 같은 방식)
+            <Pill tone="green" size="sm" sx={{ color: ds.ink }}>
+              <CheckCircleIcon size={12} color={ds.green} />
+              {pill.label}
+            </Pill>
+          ) : (
+            <Pill tone={pill.tone} size="sm">
+              {pill.label}
+            </Pill>
+          )}
         </Stack>
         {draft.submitted_at && (
           <Typography variant="body2" sx={{ color: ds.text2 }}>
@@ -436,7 +467,9 @@ function DraftCard({ draft, busy, onSubmit, onCancel }) {
 
       {isCanceled ? (
         <Typography variant="body2" sx={{ mt: 2.5, color: ds.text2 }}>
-          취소한 작성 건이에요. 올린 문서와 입력값은 지워졌어요.
+          {draft.submitted_at
+            ? '디딤돌에 남은 기록을 지운 작성 건이에요. 공식 사이트의 신청은 그대로예요.'
+            : '취소한 작성 건이에요. 올린 문서와 입력값은 지워졌어요.'}
         </Typography>
       ) : (
         <Stack
@@ -488,8 +521,15 @@ function DraftCard({ draft, busy, onSubmit, onCancel }) {
 
       {!isCanceled && (
         <Box sx={{ mt: 1.5, display: 'flex', justifyContent: 'flex-end' }}>
-          <Button size="small" onClick={onCancel} disabled={busy} sx={{ color: ds.text2 }} aria-label={`작성 건 #${draft.id} 취소`}>
-            작성 건 취소
+          {/* 제출한 건은 실제 신청 취소로 오해하지 않게 '기록 지우기'로 부른다 (#109) */}
+          <Button
+            size="small"
+            onClick={onCancel}
+            disabled={busy}
+            sx={{ color: ds.text2 }}
+            aria-label={draft.submitted_at ? `작성 건 #${draft.id} 디딤돌 기록 지우기` : `작성 건 #${draft.id} 취소`}
+          >
+            {draft.submitted_at ? '디딤돌 기록 지우기' : '작성 건 취소'}
           </Button>
         </Box>
       )}
