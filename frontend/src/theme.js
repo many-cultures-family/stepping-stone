@@ -141,7 +141,10 @@ const theme = createTheme({
           '&.Mui-disabled': { backgroundColor: ds.line, color: ds.muted },
         },
         // 흰 바탕 보조 버튼 (테두리 얇게)
+        // 테두리가 있는 버튼은 양 끝을 반지름 16으로 둔다. 끝까지 곡선(radius.full)이면 좌우 끝에서
+        // 1px 테두리가 점점 얇아져 희미해 보인다. 끝에 곧은 구간을 남겨 테두리 굵기를 일정하게 한다.
         outlined: {
+          ...squircle(16),
           borderColor: ds.line,
           color: ds.ink,
           backgroundColor: ds.white,
