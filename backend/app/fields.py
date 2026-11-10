@@ -1,10 +1,11 @@
-# F-02 입력 항목 추론·확정 (FIELD-CHECK-API.md, US-02·US-03)
+# F-02 입력 항목 추론·확정 (FIELD-CHECK-API.md, US-02·US-03). 로그인·소유자 확인 필요
 import json
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app import db, llm
+from app import auth, db, llm
 
 router = APIRouter(prefix="/api")
 
@@ -16,7 +17,7 @@ class InferRequest(BaseModel):
     flagged_field_ids: list[int] | None = None
 
 
-def _load_draft_for_field_check(conn, draft_id):
+def _load_draft_for_field_check(conn, draft_id, user):
     row = conn.execute(
         "SELECT id, user_id, status, step, fields_confirmed_at, reanalysis_count "
         "FROM draft WHERE id = ?",
@@ -24,6 +25,8 @@ def _load_draft_for_field_check(conn, draft_id):
     ).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail={"code": "DRAFT_NOT_FOUND"})
+    if row["user_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN_DRAFT"})
     if row["step"] != "field_check":
         raise HTTPException(status_code=409, detail={"code": "DRAFT_STEP_INVALID"})
     if row["status"] != "수정":
@@ -132,10 +135,10 @@ def _fields_response(draft_row, fields, allowed_format_codes):
 
 
 @router.get("/drafts/{draft_id}/fields")
-def get_fields(draft_id: int):
+def get_fields(draft_id: int, user: Annotated[dict, Depends(auth.current_user)]):
     conn = db.connect()
     try:
-        draft = _load_draft_for_field_check(conn, draft_id)
+        draft = _load_draft_for_field_check(conn, draft_id, user)
         fields = _fetch_fields(conn, draft_id)
         allowed_format_codes = _allowed_format_codes(conn)
     finally:
@@ -145,7 +148,11 @@ def get_fields(draft_id: int):
 
 
 @router.post("/drafts/{draft_id}/fields:infer")
-def infer_fields(draft_id: int, body: InferRequest | None = None):
+def infer_fields(
+    draft_id: int,
+    user: Annotated[dict, Depends(auth.current_user)],
+    body: InferRequest | None = None,
+):
     # 키 유무를 본문의 model_fields_set으로 구분한다: 키가 아예 없음(최초/중복 호출) /
     # 키는 있지만 빈 배열(거절) / 값이 있음(재분석) — 세 경우를 섞으면 안 된다
     has_flagged_key = body is not None and "flagged_field_ids" in body.model_fields_set
@@ -153,7 +160,7 @@ def infer_fields(draft_id: int, body: InferRequest | None = None):
 
     conn = db.connect()
     try:
-        draft = _load_draft_for_field_check(conn, draft_id)
+        draft = _load_draft_for_field_check(conn, draft_id, user)
         existing_fields = _fetch_fields(conn, draft_id)
         allowed_format_codes = _allowed_format_codes(conn)
 
@@ -246,10 +253,10 @@ def infer_fields(draft_id: int, body: InferRequest | None = None):
 
 
 @router.post("/drafts/{draft_id}/fields:confirm")
-def confirm_fields(draft_id: int):
+def confirm_fields(draft_id: int, user: Annotated[dict, Depends(auth.current_user)]):
     conn = db.connect()
     try:
-        draft = _load_draft_for_field_check(conn, draft_id)
+        draft = _load_draft_for_field_check(conn, draft_id, user)
         fields = _fetch_fields(conn, draft_id)
         allowed_format_codes = _allowed_format_codes(conn)
         errors = compute_errors(fields, allowed_format_codes)

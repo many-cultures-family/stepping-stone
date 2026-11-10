@@ -173,3 +173,40 @@ def test_us02_get_fields_includes_label_example_for_every_allowed_code(
     for field in res.json()["fields"]:
         assert field["format_label"] is not None
         assert field["format_example"] is not None
+
+
+def _other_user_id(db):
+    other_user_id = db.execute(
+        "INSERT INTO user (google_sub, email, language) VALUES (?, ?, ?)",
+        ("other-sub-0001", "other@example.com", "ko"),
+    ).lastrowid
+    db.commit()
+    return other_user_id
+
+
+# 권한: 다른 사용자의 작성 건은 조회·확정할 수 없다
+def test_us02_get_fields_forbidden_for_other_users_draft(client, db):
+    draft_id = insert_draft(db, _other_user_id(db), "수정", "field_check")
+
+    res = get_fields(client, draft_id)
+
+    assert res.status_code == 403
+    assert res.json() == {"detail": {"code": "FORBIDDEN_DRAFT"}}
+
+
+def test_us02_confirm_forbidden_for_other_users_draft(client, db):
+    draft_id = insert_draft(db, _other_user_id(db), "수정", "field_check")
+
+    res = confirm(client, draft_id)
+
+    assert res.status_code == 403
+    assert res.json() == {"detail": {"code": "FORBIDDEN_DRAFT"}}
+
+
+def test_us02_get_fields_without_login_is_401(anon_client, db, seed_user_id):
+    draft_id = insert_draft(db, seed_user_id, "수정", "field_check")
+
+    res = get_fields(anon_client, draft_id)
+
+    assert res.status_code == 401
+    assert res.json() == {"detail": {"code": "LOGIN_REQUIRED"}}
