@@ -42,8 +42,8 @@ npm run dev
 
 개발 서버는 `http://localhost:5173`에서 열린다.
 
-- `VITE_USE_MOCK=true`: 백엔드 없이 `src/mocks` 목데이터로 동작
-- `VITE_USE_MOCK=false`: `/api` 요청을 FastAPI(`VITE_API_PROXY_TARGET`, 기본 `http://localhost:8080`)로 프록시
+- `VITE_USE_MOCK=true`: 작성 목록·업로드·입력 항목·사전 정보·답변 검토를 `src/mocks` 목데이터로 처리한다. **로그인(Google)은 목이 없고 항상 백엔드를 쓴다**(`/api`는 FastAPI `VITE_API_PROXY_TARGET`, 기본 `http://localhost:8080`로 프록시).
+- `VITE_USE_MOCK=false`: 위 기능도 실서버를 쓴다. 사전 정보·답변 검토는 서버 API가 없어 화면이 열리지 않는다.
 
 ```bash
 npm run lint    # ESLint
@@ -62,19 +62,13 @@ npm run build   # 배포용 빌드 확인
 ```
 src/
   main.jsx            # MUI ThemeProvider
-  App.jsx             # 화면 전환 (라우터 없이 documentId 상태로 업로드/결과 전환)
+  App.jsx             # 화면 전환 (경로: router.js)
+  router.js           # 아주 작은 경로 처리
   theme.js            # MUI 테마
-  api/
-    client.js         # fetch 래퍼 (/api → FastAPI)
-    documents.js      # 서류 검증 API (목/실서버 전환)
-  mocks/
-    documents.js      # 목데이터
-  components/
-    Layout.jsx
-    ValidationItemCard.jsx  # 항목 검증 결과 + 풀이 + 수정 제안
-  pages/
-    UploadPage.jsx    # 서류 업로드
-    ResultPage.jsx    # 검증 결과, 풀이 언어 선택
+  api/                # 서버 호출 (auth, drafts, fields, documents, client)
+  auth/               # 로그인 상태 컨텍스트, 로그인 오류 문구
+  components/         # 공통 화면 조각 (머리 영역, 입력 항목 줄, 원본 미리보기 등)
+  pages/              # 랜딩, 업로드, 내 작성 목록, 입력 항목 확인
 ```
 
 ## 확인 필요

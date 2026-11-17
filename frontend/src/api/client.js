@@ -2,6 +2,8 @@
 // 개발 중에는 vite.config.js 프록시가 /api 를 FastAPI로 넘긴다.
 // LLM(Gemini) 호출은 프론트에서 하지 않는다. 항상 FastAPI를 거친다.
 
+// true 면 작성 목록·업로드·입력 항목·사전 정보·답변 검토를 src/mocks 의 목데이터로 처리한다.
+// 로그인(src/api/auth.js)은 목이 없고 항상 실서버(Google)를 쓴다.
 export const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
 /** 서버 오류. code 는 docs/API.md 오류 코드 (예: FILE_TYPE_NOT_ALLOWED), 연결 실패는 NETWORK_ERROR */

@@ -14,6 +14,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
+import { USE_MOCK } from '../api/client.js'
 import { cancelDraft, listDrafts, submitDraft } from '../api/drafts.js'
 import { useAuth } from '../auth/useAuth.js'
 import { AlertCircleIcon, ArrowIcon, CheckCircleIcon, DocumentIcon, UploadIcon } from '../components/icons.jsx'
@@ -39,7 +40,6 @@ const errorText = (e) => ERROR_TEXT[e?.code] ?? '문제가 생겼어요. 다시 
 const REJECT_TEXT = {
   OCR_FAILED: '문서 글자를 읽지 못했어요.',
   PAGE_MISSING: '빠진 페이지가 있어요.',
-  FIELD_INVALID: '입력 항목 확인에서 고칠 곳이 남았어요.',
   CONDITION_UNMET: '완성 조건이 아직 남아 있어요.',
 }
 
@@ -93,7 +93,7 @@ function progressIndex(d) {
 
 // next_action → '다음 할 일' 문구와 이동 경로 (DRAFT-STATUS-API.md 항목 1 표).
 // 버튼은 실제 서버에서 그 화면이 열리는 경우에만 둔다. 막다른 길이면 안내 문구만 보여 준다.
-// - PRIOR_INFO·REVIEW: 화면이 아직 없다
+// - PRIOR_INFO·WRITING·REVIEW: 화면(경로)이 아직 없다
 // - UPLOAD: 서버에 upload → field_check 전이가 없어 /fields 로 가면 409 DRAFT_STEP_INVALID 에 막힌다
 // - REJECTED: 같은 작성 건에 다시 올리는 API가 없다(DATA-MODEL.md 는 같은 건의 문서를 바꾼다고 적음).
 //   /upload 로 보내면 새 작성 건이 생기고 반려 건은 목록에 그대로 남는다
@@ -101,9 +101,9 @@ function progressIndex(d) {
 const NEXT_ACTION = {
   UPLOAD: { title: '입력 항목 찾기를 기다리고 있어요', body: '올린 문서에서 적어야 할 칸을 찾는 다음 단계는 준비 중이에요.' },
   FIELD_CHECK: { title: '입력 항목을 확인해 주세요', body: 'AI가 찾은 칸이 원본과 같은지 확인해요.', cta: '입력 항목 확인하기', to: (id) => `/drafts/${id}/fields` },
-  PRIOR_INFO: { title: '사전 정보를 입력해 주세요', body: '이름·생년월일처럼 자주 쓰는 정보를 먼저 저장해요. (화면 준비 중)' },
-  WRITING: { title: '가상 작성을 이어서 해 주세요', body: '실제 신청서와 같은 모양에서 미리 적어 봐요.', cta: '가상 작성 이어하기', to: (id) => `/drafts/${id}/write` },
-  REVIEW: { title: '작성한 내용을 검토해 주세요', body: '빠진 칸과 틀린 형식이 없는지 마지막으로 확인해요. (화면 준비 중)' },
+  PRIOR_INFO: { title: '사전 정보를 입력해 주세요', body: USE_MOCK ? '이름·생년월일처럼 자주 쓰는 정보를 먼저 저장해요.' : '이름·생년월일처럼 자주 쓰는 정보를 먼저 저장해요. (화면 준비 중)', ...(USE_MOCK && { cta: '사전 정보 입력하기', to: (id) => `/drafts/${id}/prior-info` }) },
+  WRITING: { title: '가상 작성을 이어서 해 주세요', body: '실제 신청서와 같은 모양에서 미리 적어 봐요. (화면 준비 중)' },
+  REVIEW: { title: '작성한 내용을 검토해 주세요', body: USE_MOCK ? '빠진 칸과 틀린 형식이 없는지 마지막으로 확인해요.' : '빠진 칸과 틀린 형식이 없는지 마지막으로 확인해요. (화면 준비 중)', ...(USE_MOCK && { cta: '답변 검토하기', to: (id) => `/drafts/${id}/review` }) },
   REJECTED: { title: '이 작성 건은 더 진행할 수 없어요', body: '' },
   SUBMIT: { title: '공식 사이트에서 직접 제출해 주세요', body: "제출을 마쳤다면 '제출 완료'를 눌러 기록을 남겨요. 디딤돌은 기관에 아무것도 보내지 않아요." },
   DONE: { title: '할 일을 모두 마쳤어요', body: '제출 기록이 남아 있어요.' },
