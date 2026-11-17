@@ -36,6 +36,7 @@ export default function PriorInfoPage({
   serverErrors = [],
   onSave,
   onStartWriting,
+  startingWriting = false,
   onRetry,
   onBack,
 }) {
@@ -101,7 +102,7 @@ export default function PriorInfoPage({
             <Typography sx={{ color: ds.text2 }}>저장된 정보를 불러오고 있어요</Typography>
           </Stack>
         ) : keys.length === 0 ? (
-          <EmptyState onStartWriting={onStartWriting} />
+          <EmptyState onStartWriting={onStartWriting} starting={startingWriting} />
         ) : (
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={{ xs: 3, md: 4 }} sx={{ alignItems: 'flex-start' }}>
             <Stack spacing={3} sx={{ flex: 1, minWidth: 0, width: '100%' }}>
@@ -146,6 +147,7 @@ export default function PriorInfoPage({
               canSubmit={canSubmit}
               onSubmit={submit}
               onStartWriting={onStartWriting}
+              startingWriting={startingWriting}
               onBack={onBack}
             />
           </Stack>
@@ -184,7 +186,7 @@ function SavedSummary({ keys, savedInfo, onEdit }) {
 }
 
 // 오른쪽(모바일은 아래) 요약: 남은 칸 수 → 저장(또는 바로 작성 시작)
-function SummaryPanel({ draftMode, expanded, allSaved, total, invalidCount, changedCount, saving, canSubmit, onSubmit, onStartWriting, onBack }) {
+function SummaryPanel({ draftMode, expanded, allSaved, total, invalidCount, changedCount, saving, canSubmit, onSubmit, onStartWriting, startingWriting, onBack }) {
   const skip = draftMode && allSaved && !expanded
   const done = total - invalidCount
 
@@ -223,7 +225,7 @@ function SummaryPanel({ draftMode, expanded, allSaved, total, invalidCount, chan
         </Box>
 
         {skip ? (
-          <Button variant="contained" size="large" disabled={!onStartWriting} onClick={onStartWriting}>
+          <Button variant="contained" size="large" disabled={!onStartWriting || startingWriting} onClick={onStartWriting}>
             바로 작성 시작
           </Button>
         ) : (
@@ -264,13 +266,13 @@ function SummaryPanel({ draftMode, expanded, allSaved, total, invalidCount, chan
 }
 
 // 이 문서에 사전 정보와 연결된 칸이 하나도 없을 때 (DESIGN.md "빈 화면")
-function EmptyState({ onStartWriting }) {
+function EmptyState({ onStartWriting, starting }) {
   return (
     <Box sx={{ p: { xs: 3, md: 5 }, ...squircle(radius.card), bgcolor: ds.card, textAlign: 'center' }}>
       <Typography variant="h3" component="h2" sx={{ fontSize: 22 }}>이 문서에는 미리 적을 정보가 없어요</Typography>
       <Typography sx={{ color: ds.text2, mt: 1 }}>이름·연락처처럼 미리 채울 칸이 없는 문서예요. 바로 작성을 시작해요.</Typography>
       {onStartWriting && (
-        <Button variant="contained" size="large" onClick={onStartWriting} sx={{ mt: 3 }}>
+        <Button variant="contained" size="large" disabled={starting} onClick={onStartWriting} sx={{ mt: 3 }}>
           작성 시작
         </Button>
       )}

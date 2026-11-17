@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Box, Button, ButtonBase, CircularProgress, Collapse, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Skeleton, Snackbar, Stack, Typography } from '@mui/material'
 import { USE_MOCK } from '../api/client.js'
-import { confirmFields, editField, getFields, inferFields, requestReanalysis } from '../api/fields.js'
+import { confirmFields, editField, inferFields, requestReanalysis } from '../api/fields.js'
 import { REANALYSIS_LIMIT } from '../api/limits.js'
 import { useAuth } from '../auth/useAuth.js'
 import DocumentPreview from '../components/DocumentPreview.jsx'
@@ -60,12 +60,11 @@ export default function FieldCheckPage({ draftId, file, onDone, onNext, onReuplo
     setServerErrors(data.errors ?? [])
   }, [])
 
-  // 처음 불러오기와 '다시 시도'가 같이 쓴다. 먼저 GET 으로 저장된 항목을 읽는다(step 이 field_check 가 아니면 LLM 을 부르기 전에 409).
-  // 항목이 하나도 없을 때만 최초 추론(inferFields)을 부른다.
+  // 처음 불러오기와 '다시 시도'가 같이 쓴다. 최초 추론(inferFields)만 부른다.
+  // 서버가 이미 항목이 있으면 LLM 을 부르지 않고 그대로 돌려주고(멱등), step 이 field_check 가 아니면 LLM 전에 409 를 준다.
   const fetchFields = useCallback(
     (isCancelled = () => false) =>
-      getFields(draftId)
-        .then((data) => (data.fields.length === 0 ? inferFields(draftId) : data))
+      inferFields(draftId)
         .then((data) => {
           if (isCancelled()) return
           applyResponse(data)
@@ -93,9 +92,14 @@ export default function FieldCheckPage({ draftId, file, onDone, onNext, onReuplo
     fetchFields()
   }
 
-  // 401 은 머리 영역까지 로그아웃으로 맞춘다
+  // 401 은 머리 영역까지 로그아웃으로 맞춘다.
+  // 409·422 처럼 더 진행할 수 없는 오류는 토스트로 끝내지 않고 처음 불러올 때와 같은 막힘 안내 화면으로 보낸다
   function handleApiError(e) {
     if (e?.code === 'LOGIN_REQUIRED') setLoggedOut()
+    if (BLOCKING_CODES.includes(e?.code)) {
+      setLoadState({ status: 'error', error: e })
+      return
+    }
     setToast(errorText(e))
   }
 

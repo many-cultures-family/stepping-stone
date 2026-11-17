@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Alert, Box, CircularProgress } from '@mui/material'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Alert, Box, Button, CircularProgress, Typography } from '@mui/material'
 import { USE_MOCK } from './api/client.js'
 import { finishReview } from './api/review.js'
 import { startWriting } from './api/priorInfo.js'
@@ -83,6 +83,10 @@ function AppContent() {
           <LoginRequired />
         </Container>
       )}
+      {/* 실서버 모드에서 북마크·뒤로 가기로 이 경로에 들어와도 빈 화면이 아니라 준비 중 안내를 보여 준다 */}
+      {!USE_MOCK && (route.name === 'prior-info' || route.name === 'review') && (
+        <ComingSoon title={route.name === 'prior-info' ? '사전 정보 입력 화면은 준비 중이에요' : '답변 검토 화면은 준비 중이에요'} />
+      )}
     </Layout>
   )
 }
@@ -90,39 +94,106 @@ function AppContent() {
 // F-03 사전 정보 입력·관리. 데이터·저장은 api/priorInfo.js(목 전용)를 거친다.
 function PriorInfoRoute({ draftId, language }) {
   const { loaded, savedInfo, status, errorCode, save, retry } = usePriorInfo()
+  const { busy, error, run, clearError } = useSingleFlight()
   if (!loaded) return <Loading />
   return (
-    <PriorInfoPage
-      // 저장하면 저장된 값이 바뀌므로 key 를 바꿔 화면을 새로 그린다(PriorInfoPage 주석)
-      key={JSON.stringify(savedInfo)}
-      language={language}
-      savedInfo={savedInfo}
-      requiredKeys={draftId ? PRIOR_INFO_KEYS : undefined}
-      status={status}
-      errorCode={errorCode}
-      onSave={save}
-      onRetry={retry}
-      onStartWriting={draftId ? () => startWritingAndGo(draftId) : undefined}
-      onBack={() => navigate(draftId ? `/drafts/${draftId}/fields` : '/drafts')}
-    />
+    <>
+      <ActionError error={error} onClose={clearError} />
+      <PriorInfoPage
+        // 저장하면 저장된 값이 바뀌므로 key 를 바꿔 화면을 새로 그린다(PriorInfoPage 주석)
+        key={JSON.stringify(savedInfo)}
+        language={language}
+        savedInfo={savedInfo}
+        requiredKeys={draftId ? PRIOR_INFO_KEYS : undefined}
+        status={status}
+        errorCode={errorCode}
+        onSave={save}
+        onRetry={retry}
+        onStartWriting={draftId ? () => run(() => startWriting(draftId).then(() => navigate('/drafts'))) : undefined}
+        startingWriting={busy}
+        onBack={() => navigate(draftId ? `/drafts/${draftId}/fields` : '/drafts')}
+      />
+    </>
   )
 }
 
 // F-06 서술형 답변 검토. 데이터·검토 요청은 api/review.js(명세 전이라 [제안], 목 전용)를 거친다.
 function AnswerReviewRoute({ draftId }) {
   const { loaded, answers, suggestions, reviewStatus, errorCode, request, decide } = useAnswerReview(draftId)
+  const { busy, error, run, clearError } = useSingleFlight()
   if (!loaded) return <Loading />
   return (
-    <AnswerReviewPage
-      answers={answers}
-      suggestions={suggestions}
-      reviewStatus={reviewStatus}
-      errorCode={errorCode}
-      onRequestReview={request}
-      onDecide={decide}
-      onFinish={() => finishReview(draftId).then(() => navigate('/drafts'))}
-      onBack={() => navigate('/drafts')}
-    />
+    <>
+      <ActionError error={error} onClose={clearError} />
+      <AnswerReviewPage
+        answers={answers}
+        suggestions={suggestions}
+        reviewStatus={reviewStatus}
+        errorCode={errorCode}
+        onRequestReview={request}
+        onDecide={decide}
+        // 요청 중에는 undefined 를 넘겨 '검토 마치기' 버튼을 끈다(AnswerReviewPage 의 canFinish)
+        onFinish={busy ? undefined : () => run(() => finishReview(draftId).then(() => navigate('/drafts')))}
+        onBack={() => navigate('/drafts')}
+      />
+    </>
+  )
+}
+
+// 다음 단계로 넘어가는 요청(작성 시작·검토 마치기)을 한 번에 하나만 보낸다.
+// 버튼을 빠르게 두 번 눌러도 상태 갱신 전에 ref 로 막고, 실패하면 오류를 남긴다(401 은 로그아웃으로 맞춘다).
+function useSingleFlight() {
+  const { setLoggedOut } = useAuth()
+  const inFlight = useRef(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  const run = useCallback(
+    (fn) => {
+      if (inFlight.current) return
+      inFlight.current = true
+      setBusy(true)
+      setError(null)
+      return Promise.resolve()
+        .then(fn)
+        .catch((e) => {
+          if (e?.code === 'LOGIN_REQUIRED') setLoggedOut()
+          setError(e)
+        })
+        .finally(() => {
+          inFlight.current = false
+          setBusy(false)
+        })
+    },
+    [setLoggedOut],
+  )
+  return { busy, error, run, clearError: () => setError(null) }
+}
+
+const ACTION_ERROR_TEXT = {
+  LOGIN_REQUIRED: '로그인이 필요해요. 다시 로그인해 주세요.',
+  NETWORK_ERROR: '서버 연결 실패. 잠시 후 다시 시도해 주세요.',
+}
+
+function ActionError({ error, onClose }) {
+  if (!error) return null
+  return (
+    <Container sx={{ pt: 2 }}>
+      <Alert severity="error" onClose={onClose}>
+        {ACTION_ERROR_TEXT[error.code] ?? '문제가 생겼어요. 다시 시도해 주세요.'}
+      </Alert>
+    </Container>
+  )
+}
+
+function ComingSoon({ title }) {
+  return (
+    <Container sx={{ py: 6 }}>
+      <Typography variant="h3" component="h1">{title}</Typography>
+      <Typography sx={{ mt: 1, color: 'text.secondary' }}>작성 건은 내 작성 목록에서 이어서 볼 수 있어요.</Typography>
+      <Button variant="contained" size="large" onClick={() => navigate('/drafts')} sx={{ mt: 3 }}>
+        내 작성 목록 보기
+      </Button>
+    </Container>
   )
 }
 
@@ -132,10 +203,6 @@ function Loading() {
       <CircularProgress aria-label="불러오는 중" />
     </Box>
   )
-}
-
-function startWritingAndGo(draftId) {
-  return startWriting(draftId).then(() => navigate('/drafts'))
 }
 
 export default function App() {
