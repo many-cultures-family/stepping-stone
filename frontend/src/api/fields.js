@@ -14,12 +14,6 @@ export { REANALYSIS_LIMIT } from './limits.js'
  *   errors?: [{ field_id, code: 'FORMAT_CODE_INVALID' | 'REQUIRED_MISSING' }] }
  */
 
-/** GET /api/drafts/{id}/fields (항목 1). 실패: 401 LOGIN_REQUIRED, 403, 404, 409 DRAFT_STEP_INVALID / DRAFT_NOT_EDITABLE */
-export function getFields(draftId) {
-  if (USE_MOCK) return mock.getFields(draftId)
-  return request(`/drafts/${draftId}/fields`)
-}
-
 /**
  * 최초 추론 POST /api/drafts/{id}/fields:infer 본문 {} (항목 2).
  * 이미 항목이 있으면 저장된 값을 그대로 돌려주는 멱등 규칙이라 화면 진입 때 불러도 안전하다.

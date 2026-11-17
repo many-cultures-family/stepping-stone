@@ -79,14 +79,6 @@ function guard(draftId) {
   if (Number(draftId) === 999) throw new ApiError('DRAFT_NOT_EDITABLE', { status: 409, code: 'DRAFT_NOT_EDITABLE' })
 }
 
-export async function getFields(draftId) {
-  await delay(300)
-  guard(draftId)
-  const s = stateFor(draftId)
-  if (!s.fields) return { draft: { ...s.draft }, fields: [] }
-  return snapshot(s)
-}
-
 // 멱등: 이미 항목이 있으면 L1 을 다시 부르지 않고 저장된 값을 돌려준다
 export async function inferFields(draftId) {
   guard(draftId)
