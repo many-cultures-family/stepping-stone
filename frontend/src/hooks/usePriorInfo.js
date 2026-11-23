@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getPriorInfo, savePriorInfo } from '../api/priorInfo.js'
+import { clearPriorInfo, getPriorInfo, savePriorInfo } from '../api/priorInfo.js'
 
 // 사전 정보 화면(F-03)에 저장된 값을 불러오고 저장하는 훅. 저장하면 값을 다시 불러와 화면을 새로 그린다(App 의 key).
 // '다시 시도'를 연타하거나 불러오기·저장이 겹치면 늦게 온 옛 응답이 최신 상태를 덮어쓸 수 있다.
@@ -41,5 +41,18 @@ export function usePriorInfo() {
     }
   }, [])
 
-  return { ...state, save, retry: load }
+  const clear = useCallback(async () => {
+    const id = ++latest.current
+    setState((s) => ({ ...s, status: 'saving', errorCode: null }))
+    try {
+      await clearPriorInfo()
+      if (id !== latest.current) return
+      setState({ loaded: true, savedInfo: {}, status: 'idle', errorCode: null })
+    } catch (e) {
+      if (id !== latest.current) return
+      setState((s) => ({ ...s, status: 'error', errorCode: e?.code ?? 'UNKNOWN' }))
+    }
+  }, [])
+
+  return { ...state, save, clear, retry: load }
 }

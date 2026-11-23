@@ -18,6 +18,12 @@ export async function savePriorInfo(values) {
   return { ...saved }
 }
 
+export async function clearPriorInfo() {
+  await delay(300)
+  saved = {}
+  return {}
+}
+
 /** 사전 정보 입력을 마치고 가상 작성 단계로 (작성 목록 목에 반영) */
 export async function startWriting(draftId) {
   await delay(300)
