@@ -1,5 +1,5 @@
 import { Box, Button, ButtonBase, Stack, Switch, Typography } from '@mui/material'
-import { USE_MOCK } from '../api/client.js'
+import { FIELD_EDIT_AVAILABLE } from '../api/fields.js'
 import { ds, radius, squircle } from '../theme.js'
 import { FIELD_ERROR_TEXT } from '../utils/validateFields.js'
 import { AlertCircleIcon } from './icons.jsx'
@@ -43,7 +43,7 @@ export default function FieldRow({ field, errors = [], selected, onSelect, onEdi
           px: { xs: 2.5, md: 3 },
           pt: 2.75,
           pb: 1,
-          pr: { xs: USE_MOCK ? 11 : 2.5, md: USE_MOCK ? 12 : 3 },
+          pr: { xs: FIELD_EDIT_AVAILABLE ? 11 : 2.5, md: FIELD_EDIT_AVAILABLE ? 12 : 3 },
           '&.Mui-focusVisible': { outline: `3px solid ${ds.primaryLine}` },
         }}
       >
@@ -125,7 +125,7 @@ export default function FieldRow({ field, errors = [], selected, onSelect, onEdi
         </Box>
       </ButtonBase>
 
-      {USE_MOCK && (
+      {FIELD_EDIT_AVAILABLE && (
         <Button
           size="small"
           variant={hasError ? 'contained' : 'outlined'}

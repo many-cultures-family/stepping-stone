@@ -7,21 +7,26 @@ import { REANALYSIS_LIMIT } from '../api/limits.js'
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-// [목 전용] 수정 창의 형식 선택 목록. 명세 응답에는 없다 (GET /api/input-formats 는 "아직 없는 항목").
-// 주민등록번호·외국인등록번호 형식은 넣지 않는다 (R8)
+// 입력 형식 목록 (GET /api/input-formats 목). 서버 db.py SEED_INPUT_FORMATS 와 순서·글자를 맞췄다 (R2 허용 목록의 단일 출처는 서버).
+// 주민등록번호·외국인등록번호 형식은 없다 (R8). signature 는 값을 받지 않고 직접 서명하라고 안내만 한다 (R10)
 export const FORMATS = [
-  { code: 'name', label: '이름', example: '홍길동' },
-  { code: 'date', label: '날짜', example: 'YYYY.MM.DD' },
-  { code: 'phone', label: '전화번호', example: '010-0000-0000' },
-  { code: 'email', label: '이메일', example: 'name@example.com' },
-  { code: 'number', label: '숫자', example: '123' },
-  { code: 'address', label: '주소', example: '도로명 주소' },
-  { code: 'short_text', label: '짧은 글', example: '100자 이내' },
-  { code: 'long_text', label: '서술형', example: '여러 줄 글' },
-  { code: 'choice', label: '선택형', example: '보기 중 하나 고르기' },
-  // 서명·날인 칸. 서비스는 값을 받지 않고 직접 서명하라고 안내만 한다 (R10, 서버 db.py 시드와 같음)
-  { code: 'signature', label: '서명', example: '직접 서명 또는 도장' },
+  { code: 'phone', label: '전화번호', pattern: '^010-\\d{4}-\\d{4}$', example: '010-0000-0000' },
+  { code: 'date', label: '날짜', pattern: '^\\d{4}\\.\\d{2}\\.\\d{2}$', example: 'YYYY.MM.DD' },
+  { code: 'email', label: '이메일', pattern: '^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$', example: 'example@email.com' },
+  { code: 'number', label: '숫자', pattern: '^\\d+$', example: '123' },
+  { code: 'name', label: '이름', pattern: '^.{1,50}$', example: '홍길동' },
+  { code: 'address', label: '주소', pattern: '^.{1,200}$', example: '○○시 ○○구 ○○로 00' },
+  { code: 'short_text', label: '짧은 글', pattern: '^.{1,100}$', example: '간단히 입력' },
+  { code: 'long_text', label: '서술형', pattern: null, example: '자유롭게 작성' },
+  { code: 'choice', label: '선택형', pattern: null, example: '보기 중 선택' },
+  { code: 'signature', label: '서명', pattern: null, example: '직접 서명 또는 도장' },
 ]
+
+export async function getInputFormats() {
+  await delay(300)
+  return { formats: FORMATS.map((f) => ({ ...f })) }
+}
+
 const formatOf = (code) => FORMATS.find((f) => f.code === code) ?? null
 
 // 서버가 L1 결과를 저장한 상태를 흉내 낸다. 기본 설명은 user.language 로 한 번 만든 값이다.
@@ -127,14 +132,17 @@ export async function confirmFields(draftId) {
   return { draft: { id: s.draft.id, status: s.draft.status, step: s.draft.step, fields_confirmed_at: s.draft.fields_confirmed_at } }
 }
 
-// ---- 목 전용: 화면 안의 수정·표시. 서버 호출이 아니라 목 상태만 바꾼다 ----
-// 수정(PATCH /fields/{id})은 명세에 없는 기능이라 목 모드에서만 동작한다.
+// ---- 항목 하나 수정 ([가정] PATCH /api/drafts/{id}/fields/{field_id}, 명세 없음) ----
 
 /** '원본과 달라요' 표시는 재분석 요청 전까지 화면 상태일 뿐 서버에 저장되지 않는다. 목은 화면 쪽 상태가 진짜라서 아무것도 하지 않는다. */
 
-/** 수정 창 저장 → 목 상태 반영 후 갱신된 응답 */
-export function applyLocalEdit(draftId, next) {
+/** 수정 창 저장 → 목 상태 반영 후 갱신된 응답 (다른 항목 API 와 같은 { draft, fields, errors? }) */
+export async function editField(draftId, next) {
+  await delay(400)
+  guard(draftId)
   const s = stateFor(draftId)
+  if (s.draft.step !== 'field_check') throw new ApiError('DRAFT_STEP_INVALID', { status: 409, code: 'DRAFT_STEP_INVALID' })
+  if (!s.fields?.some((f) => f.id === next.id)) throw new ApiError('FIELD_NOT_FOUND', { status: 404, code: 'FIELD_NOT_FOUND' })
   const fmt = formatOf(next.format_code)
   s.fields = s.fields.map((f) =>
     f.id === next.id

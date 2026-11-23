@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Box, Button, ButtonBase, CircularProgress, Collapse, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Skeleton, Snackbar, Stack, Typography } from '@mui/material'
 import { USE_MOCK } from '../api/client.js'
-import { confirmFields, editField, inferFields, requestReanalysis } from '../api/fields.js'
+import { confirmFields, editField, FIELD_EDIT_AVAILABLE, inferFields, requestReanalysis } from '../api/fields.js'
 import { REANALYSIS_LIMIT } from '../api/limits.js'
 import { useAuth } from '../auth/useAuth.js'
 import DocumentPreview from '../components/DocumentPreview.jsx'
@@ -49,6 +49,7 @@ export default function FieldCheckPage({ draftId, file, onDone, onNext, onReuplo
   const [serverErrors, setServerErrors] = useState([])
   const [selectedId, setSelectedId] = useState(null)
   const [editingId, setEditingId] = useState(null)
+  const [editState, setEditState] = useState({ busy: false, error: null })
   const [busy, setBusy] = useState(null) // 'confirm' | 'reanalyze' | null
   const [toast, setToast] = useState(null)
   const [confirmed, setConfirmed] = useState(null)
@@ -127,15 +128,26 @@ export default function FieldCheckPage({ draftId, file, onDone, onNext, onReuplo
     setFields((prev) => prev.map((f) => (f.id === id ? { ...f, flagged_wrong: !f.flagged_wrong } : f)))
   }
 
-  // [목 모드 전용] 수정 창 저장. 실서버에는 항목을 고치는 API가 없다
-  function saveField(next) {
-    const flagged = new Set(flaggedIds)
-    const data = editField(draftId, next)
-    setDraft(data.draft)
-    setFields(data.fields.map((f) => ({ ...f, flagged_wrong: flagged.has(f.id) })))
-    setServerErrors(data.errors ?? [])
-    setEditingId(null)
-    setSelectedId(next.id)
+  // 수정 창 저장 (api/fields.js editField, 실서버 API 는 [가정]이라 FIELD_EDIT_AVAILABLE 일 때만 창이 열린다).
+  // 저장하는 동안 창을 잠그고, 실패하면 창을 닫지 않고 그 안에 문구를 보여 준다
+  async function saveField(next) {
+    setEditState({ busy: true, error: null })
+    try {
+      const data = await editField(draftId, next)
+      // 저장 사이에 바뀐 '원본과 달라요' 표시를 지키도록 최신 화면 상태에서 읽는다
+      setFields((prev) => {
+        const flagged = new Set(prev.filter((f) => f.flagged_wrong).map((f) => f.id))
+        return data.fields.map((f) => ({ ...f, flagged_wrong: flagged.has(f.id) }))
+      })
+      setDraft(data.draft)
+      setServerErrors(data.errors ?? [])
+      setEditingId(null)
+      setSelectedId(next.id)
+      setEditState({ busy: false, error: null })
+    } catch (e) {
+      if (e?.code === 'LOGIN_REQUIRED') setLoggedOut()
+      setEditState({ busy: false, error: errorText(e) })
+    }
   }
 
   async function handleConfirm() {
@@ -341,12 +353,18 @@ export default function FieldCheckPage({ draftId, file, onDone, onNext, onReuplo
         </Box>
       </Container>
 
-      {USE_MOCK && editingField && (
+      {FIELD_EDIT_AVAILABLE && editingField && (
         <FieldEditSheet
           key={editingField.id}
           open
           field={editingField}
-          onClose={() => setEditingId(null)}
+          busy={editState.busy}
+          error={editState.error}
+          onClose={() => {
+            if (editState.busy) return
+            setEditingId(null)
+            setEditState({ busy: false, error: null })
+          }}
           onSave={saveField}
         />
       )}
