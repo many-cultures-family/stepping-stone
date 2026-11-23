@@ -229,16 +229,10 @@ def cancel_draft(draft_id: int, user: Annotated[dict, Depends(auth.current_user)
                 raise HTTPException(
                     status_code=409, detail={"code": "ALREADY_CANCELED"}
                 )
-            conn.execute(
-                "DELETE FROM field_answer WHERE form_field_id IN "
-                "(SELECT id FROM form_field WHERE draft_id = ?)",
-                (draft_id,),
-            )
             conn.execute("DELETE FROM form_field WHERE draft_id = ?", (draft_id,))
             conn.execute("DELETE FROM document WHERE draft_id = ?", (draft_id,))
-            # TODO(F-06·F-07): review_suggestion, privacy_detection 삭제. 두 테이블이
-            # 아직 스키마에 없어서(F-06·F-07 미구현) 여기 자리만 남겨 둔다 (T3)
-            # prior_info는 다른 작성 건이 같이 쓰므로 지우지 않는다 (T3)
+            # 입력값·사전 정보·검토 제안·감지 결과는 서버에 저장하지 않으므로 지울 것이 없다
+            # (no-server-storage-user-input.md). 브라우저 쪽 입력값은 화면이 지운다 (T3)
     finally:
         conn.close()
 
