@@ -50,7 +50,10 @@ CREATE TABLE IF NOT EXISTS draft (
     fields_confirmed_at TEXT,
     reanalysis_count INTEGER NOT NULL DEFAULT 0,
     reject_reason TEXT,
-    submitted_at TEXT
+    submitted_at TEXT,
+    review_count INTEGER NOT NULL DEFAULT 0,
+    reviewed_at TEXT,
+    explanation_count INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS document (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -95,7 +98,44 @@ CREATE TABLE IF NOT EXISTS field_answer (
     value TEXT,
     mismatch_acknowledged INTEGER NOT NULL DEFAULT 0
 );
+-- 용어 사전 (DATA-MODEL.md 75~77행, F-05 R5). 팀이 검증해 넣는다.
+-- (term, language)가 정확히 같은 행을 찾으므로 그 둘을 UNIQUE로 둔다 (WORD-EXPLAIN-API.md 항목 1)
+CREATE TABLE IF NOT EXISTS glossary_term (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    term TEXT NOT NULL,
+    language TEXT NOT NULL,
+    explanation TEXT NOT NULL,
+    UNIQUE (term, language)
+);
+-- 쉬운 풀이 (DATA-MODEL.md 78~82행, F-05 L2). 사용자 사이에 같이 쓰므로 user_id·draft_id가 없다.
+-- (selected_text, language)가 같은 요청은 저장된 풀이를 쓴다 (R5 "같은 질문에 같은 설명")
+CREATE TABLE IF NOT EXISTS easy_explanation (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    selected_text TEXT NOT NULL,
+    glossary_term_id INTEGER REFERENCES glossary_term(id),
+    language TEXT NOT NULL,
+    explanation TEXT NOT NULL,
+    request_count INTEGER NOT NULL DEFAULT 1,
+    UNIQUE (selected_text, language)
+);
 """
+
+# 이미 만들어진 로컬 DB(didimdol.db)의 draft 테이블에 없는 칸을 채운다.
+# CREATE TABLE IF NOT EXISTS는 기존 테이블에 칸을 더하지 않기 때문이다.
+# review_count·reviewed_at: REVIEW-PRIVACY-API.md 항목 3 / explanation_count: WORD-EXPLAIN-API.md 항목 2
+# (DATA-MODEL.md 반영은 PM)
+DRAFT_ADDED_COLUMNS = [
+    ("review_count", "INTEGER NOT NULL DEFAULT 0"),
+    ("reviewed_at", "TEXT"),
+    ("explanation_count", "INTEGER NOT NULL DEFAULT 0"),
+]
+
+
+def add_missing_draft_columns(conn):
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(draft)")}
+    for name, definition in DRAFT_ADDED_COLUMNS:
+        if name not in existing:
+            conn.execute(f"ALTER TABLE draft ADD COLUMN {name} {definition}")
 
 
 def get_db_path():
@@ -114,6 +154,7 @@ def init_db():
     conn = connect()
     try:
         conn.executescript(SCHEMA)
+        add_missing_draft_columns(conn)
         conn.execute(
             "INSERT OR IGNORE INTO user (google_sub, email, language) VALUES (?, ?, ?)",
             (SEED_GOOGLE_SUB, SEED_EMAIL, SEED_LANGUAGE),
