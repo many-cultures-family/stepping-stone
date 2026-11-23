@@ -15,7 +15,7 @@ import {
   Typography,
 } from '@mui/material'
 import { USE_MOCK } from '../api/client.js'
-import { recognizeDocument } from '../api/documents.js'
+import { recognizeDocument, REUPLOAD_AVAILABLE } from '../api/documents.js'
 import { cancelDraft, listDrafts, submitDraft } from '../api/drafts.js'
 import { useAuth } from '../auth/useAuth.js'
 import { startWriting } from '../api/writing.js'
@@ -25,7 +25,7 @@ import PageHero from '../components/PageHero.jsx'
 import { Container, Pill } from '../components/ui.jsx'
 import { navigate } from '../router.js'
 import { ds, radius, squircle } from '../theme.js'
-import { rejectText } from '../utils/rejectReason.js'
+import { REJECT_HINT, rejectText } from '../utils/rejectReason.js'
 
 // API 오류 코드 → 문구 (DRAFT-STATUS-API.md 실패 응답). 코드 → 문구는 이 표 한 곳에서만 고른다.
 const ERROR_TEXT = {
@@ -94,9 +94,8 @@ function progressIndex(d) {
 // - PRIOR_INFO·WRITING·REVIEW: 화면(경로)이 아직 없다
 // - UPLOAD: 업로드 뒤 글자 인식을 못 마친 건(화면을 닫았거나 인식 요청이 실패). 카드에서 바로 인식을 다시 부른다
 //   (OCR-API.md 항목 1). /fields 로 보내면 409 DRAFT_STEP_INVALID 에 막힌다
-// - REJECTED: 같은 작성 건에 다시 올리는 API가 없다(DATA-MODEL.md 는 같은 건의 문서를 바꾼다고 적음).
-//   /upload 로 보내면 새 작성 건이 생기고 반려 건은 목록에 그대로 남는다
-// 단계 전이·재업로드 담당이 정해지면 cta·to 를 다시 붙인다.
+// - REJECTED: 다시 올리기 API 가 있으면(REUPLOAD_AVAILABLE) 같은 작성 건에 다른 파일을 올린다(DATA-MODEL.md "문서 교체").
+//   없으면 새 작성 건으로 올리게 안내한다. 이때 반려 건은 목록에 남으므로 필요 없으면 취소하게 알린다
 const NEXT_ACTION = {
   UPLOAD: { title: '문서 글자를 읽어야 해요', body: '올린 문서에서 글자를 읽고 개인정보를 가려요. 처음에는 30초쯤 걸릴 수 있어요.' },
   FIELD_CHECK: { title: '입력 항목을 확인해 주세요', body: 'AI가 찾은 칸이 원본과 같은지 확인해요.', cta: '입력 항목 확인하기', to: (id) => `/drafts/${id}/fields` },
@@ -104,7 +103,9 @@ const NEXT_ACTION = {
   PRIOR_INFO: { title: '사전 정보를 입력해 주세요', body: USE_MOCK ? '이름·생년월일처럼 자주 쓰는 정보를 먼저 저장해요.' : '사전 정보 입력 화면은 준비 중이에요. 바로 가상 작성을 시작할 수 있어요.', ...(USE_MOCK && { cta: '사전 정보 입력하기', to: (id) => `/drafts/${id}/prior-info` }) },
   WRITING: { title: '가상 작성을 이어서 해 주세요', body: '실제 신청서 위에서 미리 적어 봐요.', cta: '가상 작성하기', to: (id) => `/drafts/${id}/writing` },
   REVIEW: { title: '작성한 내용을 검토해 주세요', body: USE_MOCK ? '빠진 칸과 틀린 형식이 없는지 마지막으로 확인해요.' : '빠진 칸과 틀린 형식이 없는지 마지막으로 확인해요. (화면 준비 중)', ...(USE_MOCK && { cta: '답변 검토하기', to: (id) => `/drafts/${id}/review` }) },
-  REJECTED: { title: '이 작성 건은 더 진행할 수 없어요', body: '' },
+  REJECTED: REUPLOAD_AVAILABLE
+    ? { title: '다른 파일로 다시 올려 주세요', body: '', cta: '다시 올리기', to: (id) => `/drafts/${id}/reupload` }
+    : { title: '새 파일로 다시 올려 주세요', body: '', cta: '새로 올리기', to: () => '/upload' },
   SUBMIT: { title: '공식 사이트에서 직접 제출해 주세요', body: "제출을 마쳤다면 '제출 완료'를 눌러 기록을 남겨요. 디딤돌은 기관에 아무것도 보내지 않아요." },
   DONE: { title: '할 일을 모두 마쳤어요', body: '제출 기록이 남아 있어요.' },
 }
@@ -466,15 +467,26 @@ function EmptyState({ text, showUpload }) {
   )
 }
 
+// 반려 카드 본문: 사유 + 다시 올릴 때 도움말 (업로드 화면과 같은 문구, utils/rejectReason.js)
+function rejectedBody(reason, late) {
+  if (late) return `${rejectText(reason)} 필요 없으면 이 작성 건을 취소해 주세요.`
+  const parts = [rejectText(reason), REJECT_HINT[reason]]
+  parts.push(REUPLOAD_AVAILABLE ? '다시 올리면 이 작성 건에서 이어서 진행해요.' : '새로 올리면 작성 건이 하나 더 생겨요. 이 작성 건이 필요 없으면 취소해 주세요.')
+  return parts.filter(Boolean).join(' ')
+}
+
+// 올리기 단계가 아닌 곳에서 반려된 건 (다시 올리기로 풀리지 않는다)
+const REJECTED_LATE = { title: '이 작성 건은 더 진행할 수 없어요', body: '' }
+
 function DraftCard({ draft, busy, onSubmit, onRecognize, onStartWriting, onCancel }) {
   const category = categoryOf(draft)
   const pill = CATEGORY_PILL[category]
   const isCanceled = category === 'canceled'
-  const action = draft.next_action ? NEXT_ACTION[draft.next_action] : null
-  const body =
-    draft.next_action === 'REJECTED'
-      ? `${rejectText(draft.reject_reason)} 같은 작성 건에 다시 올리는 기능은 준비 중이에요. 필요 없으면 이 작성 건을 취소해 주세요.`
-      : action?.body
+  // 화면은 올리기 단계의 반려(글자 인식 실패 등)에만 다시 올리기를 권한다. 다른 단계 반려(예: CONDITION_UNMET)는
+  // 서버가 받아 주더라도(PR #38) 지금까지 한 작업이 지워지므로 안내만 한다
+  const lateReject = draft.next_action === 'REJECTED' && draft.step !== 'upload'
+  const action = lateReject ? REJECTED_LATE : draft.next_action ? NEXT_ACTION[draft.next_action] : null
+  const body = draft.next_action === 'REJECTED' ? rejectedBody(draft.reject_reason, lateReject) : action?.body
   const titleId = `draft-${draft.id}-title`
 
   return (

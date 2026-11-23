@@ -31,6 +31,25 @@ export async function uploadDocument(file) {
   }
 }
 
+// 반려 건에 다시 올리기 (POST .../document:reupload, 백엔드 PR #38). 같은 작성 건이 수정·upload 로 돌아간다
+export async function reuploadDocument(draftId, file) {
+  await delay(500)
+  const d = findDraft(draftId)
+  if (!d) throw new ApiError('DRAFT_NOT_FOUND', { status: 404, code: 'DRAFT_NOT_FOUND' })
+  if (!file) throw new ApiError('파일 없음', { status: 400, code: 'FILE_REQUIRED' })
+  if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+    throw new ApiError('허용하지 않는 형식', { status: 415, code: 'FILE_TYPE_NOT_ALLOWED' })
+  }
+  // 서버와 같이 반려 건이면 단계와 상관없이 받는다
+  if (d.status !== '반려') throw new ApiError('DRAFT_NOT_REJECTED', { status: 409, code: 'DRAFT_NOT_REJECTED' })
+  updateDraft(d.id, { status: '수정', step: 'upload', reject_reason: null })
+  fileNames.set(d.id, file.name)
+  return {
+    draft: { id: d.id, status: '수정', step: 'upload' },
+    document: { mime_type: file.type, page_count: 1 },
+  }
+}
+
 export async function recognizeDocument(draftId) {
   await delay(1500)
   const d = findDraft(draftId)

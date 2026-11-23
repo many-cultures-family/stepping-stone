@@ -29,6 +29,26 @@ export function recognizeDocument(draftId) {
   return request(`/drafts/${draftId}/document:recognize`, { method: 'POST' })
 }
 
+// 반려된 작성 건에 다른 파일을 다시 올리는 API 가 실서버에 있는지.
+// 서버 API 는 백엔드 PR #38(w8/t01) `document:reupload` 다. 그 PR 이 main 에 들어가기 전에는 실서버에서 404 가 난다.
+// 서버를 되돌려야 하면 이 값을 USE_MOCK 으로 바꾸면 화면이 '새로 올리기' 안내로 돌아간다.
+export const REUPLOAD_AVAILABLE = true
+
+/**
+ * 반려된 작성 건에 문서 다시 올리기 `POST /api/drafts/{id}/document:reupload` (multipart `file`, 백엔드 PR #38 [명세 없음, 제안]).
+ * 반려 건이면 단계와 상관없이 받는다. 서버가 상태·단계·사유와 확정 시각을 비우고, 옛 원본과 그 문서로 만든 입력 항목을 지운다.
+ * DATA-MODEL.md 규칙: 작성 건 하나에 문서는 하나라 다시 올리면 문서를 바꾸고 옛 파일·입력 항목을 지운다.
+ * 상태는 `반려 → 수정`, 단계는 `upload` 로 돌아간다(03-rules-states-llm.md). 이어서 recognizeDocument 를 부른다.
+ * → { draft: { id, status: '수정', step: 'upload' }, document: { mime_type, page_count } }  (uploadDocument 와 같은 모양)
+ * 오류: 400 FILE_REQUIRED · 415 FILE_TYPE_NOT_ALLOWED · 409 DRAFT_NOT_REJECTED(반려가 아닌 건) · 401 · 403 · 404
+ */
+export function reuploadDocument(draftId, file) {
+  if (USE_MOCK) return mock.reuploadDocument(draftId, file)
+  const form = new FormData()
+  form.append('file', file)
+  return request(`/drafts/${draftId}/document:reupload`, { method: 'POST', body: form })
+}
+
 /**
  * 원본 한 페이지 이미지 주소 (`GET /api/drafts/{id}/document/pages/{page}`, page 는 1부터, VIRTUAL-FORM-API.md 항목 3 [제안]).
  * 단계 제한이 없어 F-02 입력 항목 확인 미리보기와 F-04 가상 작성이 같이 쓴다. 취소된 건은 404 DOCUMENT_NOT_FOUND,
