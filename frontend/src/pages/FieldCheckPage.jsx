@@ -495,7 +495,7 @@ function EmptyState({ title, body, action }) {
 function ConfirmedView({ count, requiredCount, onDone, onNext }) {
   return (
     <>
-      <PageHero step={2} overline="STEP 2 완료" title="입력할 칸을 확정했어요" description={onNext ? '다음 단계는 자주 쓰는 정보(이름·연락처 등)를 적어 두는 사전 정보 입력이에요.' : '다음 단계는 자주 쓰는 정보(이름·연락처 등)를 적어 두는 사전 정보 입력이에요. 이 단계는 준비 중이에요.'} />
+      <PageHero step={2} overline="STEP 2 완료" title="입력할 칸을 확정했어요" description={onNext ? '다음 단계는 자주 쓰는 정보(이름·연락처 등)를 적어 두는 사전 정보 입력이에요.' : "다음 단계는 실제 신청서 위에서 미리 적어 보는 가상 작성이에요. 내 작성 목록에서 '가상 작성 시작'을 눌러 이어서 해요."} />
       <Container sx={{ mt: { xs: 4, md: 6 } }}>
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3, alignItems: 'stretch' }}>
           <Stack direction="row" spacing={3} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 2, bgcolor: ds.card, ...squircle(radius.card), p: { xs: 3, md: 4 } }}>
@@ -519,7 +519,7 @@ function ConfirmedView({ count, requiredCount, onDone, onNext }) {
             sx={{ justifyContent: 'center', ...squircle(radius.card), background: ds.sky, p: { xs: 3, md: 4 } }}
           >
             <Typography variant="h3" component="p">
-              {onNext ? '사전 정보를 입력하러 가요' : '다음 단계(사전 정보)는 준비 중이에요'}
+              {onNext ? '사전 정보를 입력하러 가요' : '내 작성 목록에서 가상 작성을 시작해요'}
             </Typography>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
               {onNext && (
