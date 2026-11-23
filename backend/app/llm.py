@@ -20,6 +20,7 @@ FORMAT_CODES = [
     "short_text",
     "long_text",
     "choice",
+    "signature",
 ]
 PRIOR_INFO_KEYS = ["name", "birth_date", "phone", "address"]
 
@@ -116,7 +117,7 @@ def _validate_field_shape(item):
 def _build_prompt(masked_text, language, existing_fields, flagged_field_ids):
     field_keys = (
         "label(항목명), "
-        "format_code(phone/date/email/number/name/address/short_text/long_text/choice 중 하나), "
+        "format_code(phone/date/email/number/name/address/short_text/long_text/choice/signature 중 하나), "
         "required(참거짓), prior_info_key(name/birth_date/phone/address 중 연결되는 것, 없으면 null), "
         f"description({language} 언어로 쓴 사용자용 설명), "
         'bbox({"page":1,"x":0~1,"y":0~1,"w":0~1,"h":0~1}).'
@@ -132,6 +133,17 @@ def _build_prompt(masked_text, language, existing_fields, flagged_field_ids):
             "각 줄 앞 `@p<페이지> x,y,w,h |`는 그 줄의 위치 데이터다. 항목의 bbox는 이 값에서 고른다. "
             "대괄호 [이름]·[전화번호] 등은 가린 개인정보 토큰이므로 값을 짐작하지 말고, "
             "항목 이름·설명에 옮겨 쓰지 않는다."
+        ),
+        # 표 밖에 있는 칸도 입력 항목이다. 지시가 없으면 L1이 날짜줄·서명란을 항목으로 보지 않고 버렸다
+        # (2026-11-23 실측: 표 안 4칸만 돌려줌)
+        (
+            "표 안의 칸뿐 아니라 문서 아래쪽의 칸도 입력 항목이다. "
+            "'년 월 일'처럼 숫자 자리가 비어 있는 날짜 줄은 format_code를 date로 하는 항목이다. "
+            "label은 앞뒤 문맥으로 정하고(예: 신청일, 작성일), 문맥이 없으면 '작성일'로 한다. "
+            "'(인)', '(서명 또는 인)', '서명', '날인'이 있는 자리는 format_code를 signature로 하는 항목이다. "
+            "label은 같은 줄의 사람 이름 칸을 붙여 정한다(예: 신청인 서명, 보호자 서명). "
+            "signature 항목의 description에는 이 칸은 사용자가 실제 서류에 직접 서명하거나 도장을 찍는 칸이라고 쓴다. "
+            "bbox는 그 줄의 위치 데이터에서 고른다."
         ),
         f"사용 언어 코드: {language}",
         f"문서 텍스트:\n{masked_text}",

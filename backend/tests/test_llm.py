@@ -136,3 +136,22 @@ def test_llm_call_gemini_requests_json_response_format(monkeypatch):
         captured["body"]["generationConfig"]["responseMimeType"] == "application/json"
     )
     assert "responseSchema" in captured["body"]["generationConfig"]
+
+
+# 날짜줄('년 월 일')·서명란('(인)')도 입력 항목으로 잡게 지시한다 (2026-11-23 실측: 지시 없이는 L1이 버림)
+def test_prompt_asks_for_date_line_and_signature_fields(monkeypatch):
+    captured = {}
+
+    def fake_call(prompt):
+        captured["prompt"] = prompt
+        return "[]"
+
+    monkeypatch.setattr(llm, "_call_gemini", fake_call)
+    llm.infer_fields(masked_text="@p1 0.45,0.40,0.24,0.02 | 년 월 일", language="vi")
+
+    prompt = captured["prompt"]
+    assert "'년 월 일'" in prompt and "date" in prompt
+    assert "(인)" in prompt and "signature" in prompt
+    assert (
+        "signature" in llm.RESPONSE_SCHEMA["items"]["properties"]["format_code"]["enum"]
+    )

@@ -1,6 +1,7 @@
 # input_format은 R2 허용 목록의 단일 출처다 (F-02 리뷰 — 허용 목록이 코드 상수와
-# DB에 각각 있으면 어긋난다). 9종이 모두 채워져 있는지 고정해 둔다.
+# DB에 각각 있으면 어긋난다). 10종이 모두 채워져 있는지 고정해 둔다 (signature는 2026-11-23 추가).
 ALLOWED_FORMAT_CODES = {
+    "signature",
     "phone",
     "date",
     "email",
