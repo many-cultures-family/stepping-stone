@@ -127,6 +127,12 @@ def _build_prompt(masked_text, language, existing_fields, flagged_field_ids):
             "이 문서의 입력 항목을 모두 찾아 JSON 배열로만 답하라."
         ),
         f"각 항목은 다음 키를 가진다: {field_keys}",
+        # masked_text 모양 (OCR-API.md "L1 프롬프트에 넣을 지시")
+        (
+            "각 줄 앞 `@p<페이지> x,y,w,h |`는 그 줄의 위치 데이터다. 항목의 bbox는 이 값에서 고른다. "
+            "대괄호 [이름]·[전화번호] 등은 가린 개인정보 토큰이므로 값을 짐작하지 말고, "
+            "항목 이름·설명에 옮겨 쓰지 않는다."
+        ),
         f"사용 언어 코드: {language}",
         f"문서 텍스트:\n{masked_text}",
     ]
