@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Box,
   Button,
   ButtonBase,
+  CircularProgress,
   Dialog,
   Drawer,
   IconButton,
@@ -13,16 +14,34 @@ import {
 } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 import { ds, radius, squircle } from '../theme.js'
-import { FORMATS } from '../mocks/fields.js'
+import { getInputFormats } from '../api/fields.js'
 import { FIELD_ERROR_TEXT, validateField } from '../utils/validateFields.js'
 import { CloseIcon } from './icons.jsx'
 
 // 항목 하나 수정: 폰은 바텀시트, 노트북 이상은 가운데 창.
 // 부모가 key={field.id} 로 렌더해서 열 때마다 값이 새로 채워진다.
-// [목 모드 전용] 명세에 항목을 고치는 API와 입력 형식 목록 API(GET /api/input-formats)가 없다.
-// 형식 선택 목록은 목 데이터의 FORMATS 를 쓴다. 실서버 모드에서는 이 창을 열지 않는다.
-export default function FieldEditSheet({ open, field, onClose, onSave }) {
-  const formats = FORMATS
+// - 형식 선택지·허용 목록은 서버 입력 형식 목록(GET /api/input-formats, api/fields.js getInputFormats)을 쓴다 (R2 단일 출처)
+// - 저장은 부모(onSave)가 비동기로 한다. busy 동안 창을 잠그고, error 가 오면 창 안에 보여 준다
+// - 항목 수정 API 는 아직 명세에 없어 부모가 FIELD_EDIT_AVAILABLE 일 때만 이 창을 연다
+export default function FieldEditSheet({ open, field, busy = false, error = null, onClose, onSave }) {
+  const [formatState, setFormatState] = useState({ status: 'loading', formats: [] })
+  const [reloadKey, setReloadKey] = useState(0)
+  useEffect(() => {
+    let ignore = false
+    getInputFormats().then(
+      (data) => {
+        if (!ignore) setFormatState({ status: 'ready', formats: data.formats ?? [] })
+      },
+      () => {
+        if (!ignore) setFormatState({ status: 'error', formats: [] })
+      },
+    )
+    return () => {
+      ignore = true
+    }
+  }, [reloadKey])
+  const formats = formatState.formats
+  const formatsReady = formatState.status === 'ready'
   const theme = useTheme()
   const desktop = useMediaQuery(theme.breakpoints.up('md'))
   const [draft, setDraft] = useState(() => ({ ...field, options: field?.options ?? [] }))
@@ -30,7 +49,8 @@ export default function FieldEditSheet({ open, field, onClose, onSave }) {
 
   if (!field) return null
 
-  const errors = validateField(draft, formats.map((f) => f.code))
+  // 형식 목록을 받기 전에는 허용 목록 검사를 하지 않는다 (모든 형식이 '없는 형식'으로 보이지 않게)
+  const errors = validateField(draft, formatsReady ? formats.map((f) => f.code) : [draft.format_code])
   const set = (patch) => setDraft((d) => ({ ...d, ...patch }))
 
   function addOption() {
@@ -108,7 +128,29 @@ export default function FieldEditSheet({ open, field, onClose, onSave }) {
             title="어떤 형식으로 쓰나요?"
             error={errors.includes('FORMAT_CODE_INVALID') && FIELD_ERROR_TEXT.FORMAT_CODE_INVALID}
           >
-            <Box role="radiogroup" aria-label="입력 형식" sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: '1fr 1fr 1fr' }, gap: 1 }}>
+            {formatState.status === 'loading' && (
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center', color: ds.text2 }} aria-live="polite">
+                <CircularProgress size={18} />
+                <Typography variant="body2">입력 형식 목록을 불러오고 있어요</Typography>
+              </Stack>
+            )}
+            {formatState.status === 'error' && (
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }} role="alert">
+                <Typography variant="body2" sx={{ color: ds.red, fontWeight: 600 }}>
+                  입력 형식 목록을 불러오지 못했어요.
+                </Typography>
+                <Button
+                  size="small"
+                  onClick={() => {
+                    setFormatState({ status: 'loading', formats: [] })
+                    setReloadKey((k) => k + 1)
+                  }}
+                >
+                  다시 시도
+                </Button>
+              </Stack>
+            )}
+            <Box role="radiogroup" aria-label="입력 형식" sx={{ display: formatsReady ? 'grid' : 'none', gridTemplateColumns: { xs: '1fr 1fr', sm: '1fr 1fr 1fr' }, gap: 1 }}>
               {formats.map((fmt) => {
                 const active = draft.format_code === fmt.code
                 return (
@@ -180,13 +222,20 @@ export default function FieldEditSheet({ open, field, onClose, onSave }) {
       </Box>
 
       <Box sx={{ px: 3, pt: 1.5, pb: desktop ? 3 : 'max(16px, env(safe-area-inset-bottom))' }}>
+        {error && (
+          <Typography variant="body2" role="alert" sx={{ color: ds.red, fontWeight: 600, mb: 1.5 }}>
+            {error}
+          </Typography>
+        )}
         <Button
           fullWidth
           size="large"
           variant="contained"
+          disabled={busy || !formatsReady || errors.length > 0}
           onClick={() => onSave({ ...draft, label: draft.label.trim(), options: draft.format_code === 'choice' ? draft.options : null })}
+          startIcon={busy ? <CircularProgress size={18} color="inherit" /> : null}
         >
-          저장하기
+          {busy ? '저장하고 있어요' : '저장하기'}
         </Button>
       </Box>
     </Box>

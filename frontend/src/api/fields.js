@@ -60,11 +60,35 @@ export function documentUrl(draftId) {
   return `/api/drafts/${draftId}/document`
 }
 
+// 입력 형식 목록은 한 번 받아 두고 다시 쓴다 (서버 허용 목록은 화면이 떠 있는 동안 바뀌지 않는다). 실패하면 다음에 다시 부른다
+let formatsCache = null
+
 /**
- * [목 전용] 수정 창 저장. 명세에 항목을 고치는 API가 없다(FIELD-CHECK-API "아직 없는 항목").
- * 정해지면 PATCH /api/drafts/{id}/fields/{field_id} 같은 경로로 바꾼다. 실서버 모드에서는 호출하지 않는다.
+ * 입력 형식 목록 GET /api/input-formats (F-03 [제안], 백엔드 PR #36) → { formats: [{ code, label, pattern, example }] }
+ * 항목 수정 창의 형식 선택지와 허용 목록 검사에 쓴다. 로그인 필요(401 LOGIN_REQUIRED).
+ */
+export function getInputFormats() {
+  if (!formatsCache) {
+    formatsCache = (USE_MOCK ? mock.getInputFormats() : request('/input-formats')).catch((e) => {
+      formatsCache = null
+      throw e
+    })
+  }
+  return formatsCache
+}
+
+// 항목 하나를 고치는 API 가 실서버에 있는지. FIELD-CHECK-API.md "아직 없는 항목"이라 지금은 목 모드에서만 켠다.
+// 서버 API 가 나오면 아래 editField 경로·본문을 맞추고 이 값을 true 로 바꾼다 (수정 버튼·창이 실서버에서도 열린다).
+export const FIELD_EDIT_AVAILABLE = USE_MOCK
+
+/**
+ * 항목 하나 수정. **[가정] `PATCH /api/drafts/{id}/fields/{field_id}`** 본문 { label, required, format_code, options } — 명세 없음.
+ * → 다른 항목 API 와 같은 { draft, fields, errors? }. 확정 전(step field_check, status 수정)에만 고칠 수 있다.
+ * 오류(가정): 401 · 403 FORBIDDEN_DRAFT · 404 DRAFT_NOT_FOUND / FIELD_NOT_FOUND · 409 DRAFT_STEP_INVALID / DRAFT_NOT_EDITABLE
+ *            · 400 FIELDS_INVALID (+errors: LABEL_EMPTY · FORMAT_CODE_INVALID · OPTIONS_EMPTY …)
  */
 export function editField(draftId, next) {
-  if (!USE_MOCK) throw new Error('항목 수정 API는 아직 없어요')
-  return mock.applyLocalEdit(draftId, next)
+  if (USE_MOCK) return mock.editField(draftId, next)
+  const { label, required, format_code, options } = next
+  return request(`/drafts/${draftId}/fields/${next.id}`, { method: 'PATCH', body: { label, required, format_code, options } })
 }
