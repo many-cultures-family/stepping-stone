@@ -34,6 +34,20 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+#### 문서 인식(OCR) 참고
+
+- 문서 인식(`POST /api/drafts/{id}/document:recognize`)은 EasyOCR을 씁니다. PyTorch가 같이 설치되어 용량이 약 1GB입니다.
+- 처음 인식할 때 모델(약 95MB)을 `~/.EasyOCR/`에 내려받습니다. 첫 요청은 모델 로딩까지 20초 넘게 걸릴 수 있고, 그 뒤로는 1쪽에 1~3초 정도입니다(Apple Silicon GPU 기준).
+- 모델을 받을 때 `SSL: CERTIFICATE_VERIFY_FAILED`가 나면, python.org에서 받은 Python에 인증서가 등록되지 않은 것입니다. 아래 둘 중 하나를 합니다.
+
+```bash
+# 방법 1: Python 설치 폴더의 인증서 설치 스크립트 실행 (폴더 이름은 자기 Python 버전으로)
+open "/Applications/Python 3.13/Install Certificates.command"
+# 방법 2: 가상환경에 certifi를 깔고, 서버를 켜는 셸에서만 그 인증서를 쓰기
+pip install certifi
+export SSL_CERT_FILE=$(python -c "import certifi; print(certifi.where())")
+```
+
 ### 4. 서버 실행
 
 FastAPI 앱 객체 `app`은 `backend/app/main.py`에 있습니다.

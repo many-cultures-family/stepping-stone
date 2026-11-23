@@ -1,7 +1,21 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { Box, Typography } from '@mui/material'
 import { USE_MOCK } from '../api/client.js'
 import { ds, radius, squircle } from '../theme.js'
+
+// File 하나에 미리보기 주소(blob:) 하나를 만들어 다시 쓴다. 지우지(revoke) 않는다:
+// 예전처럼 useMemo 로 만들고 effect 정리에서 지우면, 개발 모드 StrictMode 가 effect 를 '실행→정리→실행'할 때
+// memo 값은 그대로인데 주소만 지워져서 PDF(<object>)가 빈 화면이 됐다 (이미지는 src 를 넣는 즉시 읽어서 우연히 보였음).
+// File 은 router.js pendingFiles 에 새로고침 전까지 남아 있으므로 주소를 남겨 둬도 메모리가 더 들지 않는다.
+const blobUrls = new WeakMap()
+function blobUrlFor(file) {
+  let url = blobUrls.get(file)
+  if (!url) {
+    url = URL.createObjectURL(file)
+    blobUrls.set(file, url)
+  }
+  return url
+}
 
 // 원본 미리보기 + 항목 칸 강조 (US-02 "항목을 누르면 원본의 해당 칸이 강조된다").
 // bbox 는 페이지 크기 대비 0~1 비율이라 이미지 크기와 상관없이 % 로 겹쳐 그린다.
@@ -13,8 +27,7 @@ export default function DocumentPreview({ file, fields, selectedId, onSelect, ma
   const pageRef = useRef(null)
   const boxRefs = useRef({})
 
-  const fileUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file])
-  useEffect(() => () => fileUrl && URL.revokeObjectURL(fileUrl), [fileUrl])
+  const fileUrl = file ? blobUrlFor(file) : null
 
   const source = file
     ? { kind: file.type === 'application/pdf' ? 'pdf' : 'image', url: fileUrl }

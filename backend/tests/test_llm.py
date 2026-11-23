@@ -136,3 +136,64 @@ def test_llm_call_gemini_requests_json_response_format(monkeypatch):
         captured["body"]["generationConfig"]["responseMimeType"] == "application/json"
     )
     assert "responseSchema" in captured["body"]["generationConfig"]
+
+
+# 날짜줄('년 월 일')·서명란('(인)')도 입력 항목으로 잡게 지시한다 (2026-11-23 실측: 지시 없이는 L1이 버림)
+def test_prompt_asks_for_date_line_and_signature_fields(monkeypatch):
+    captured = {}
+
+    def fake_call(prompt):
+        captured["prompt"] = prompt
+        return "[]"
+
+    monkeypatch.setattr(llm, "_call_gemini", fake_call)
+    llm.infer_fields(masked_text="@p1 0.45,0.40,0.24,0.02 | 년 월 일", language="vi")
+
+    prompt = captured["prompt"]
+    assert "'년 월 일'" in prompt and "date" in prompt
+    assert "(인)" in prompt and "signature" in prompt
+    assert (
+        "signature" in llm.RESPONSE_SCHEMA["items"]["properties"]["format_code"]["enum"]
+    )
+
+
+# 2026-11-23 실측: 스키마에 options가 없어 동의서의 동의 여부 칸 3개가 보기 없이 왔다
+def test_schema_has_options_and_prompt_explains_checkboxes(monkeypatch):
+    captured = {}
+
+    def fake_call(prompt):
+        captured["prompt"] = prompt
+        return "[]"
+
+    monkeypatch.setattr(llm, "_call_gemini", fake_call)
+    llm.infer_fields(
+        masked_text="@p1 0.36,0.29,0.28,0.02 | 동의합니다 다 동의하지 않습니다 n",
+        language="ko",
+    )
+    assert llm.RESPONSE_SCHEMA["items"]["properties"]["options"]["type"] == "ARRAY"
+    assert "□" in captured["prompt"] and "options" in captured["prompt"]
+
+
+def test_consent_choice_without_options_gets_yes_no(monkeypatch):
+    fake_fields = [
+        {
+            "label": "개인정보 수집 이용 동의",
+            "format_code": "choice",
+            "required": True,
+            "description": "동의 여부",
+            "options": None,
+            "bbox": {"page": 1, "x": 0.36, "y": 0.29, "w": 0.28, "h": 0.02},
+        },
+        {
+            "label": "자녀와의 관계",
+            "format_code": "choice",
+            "required": True,
+            "description": "관계",
+            "bbox": {"page": 1, "x": 0.1, "y": 0.1, "w": 0.1, "h": 0.02},
+        },
+    ]
+    monkeypatch.setattr(llm, "_call_gemini", lambda prompt: json.dumps(fake_fields))
+    fields = llm.infer_fields(masked_text="문서 내용", language="ko")
+    assert fields[0]["options"] == ["동의합니다", "동의하지 않습니다"]
+    # 동의가 아닌 선택형은 보기를 지어내지 않는다
+    assert fields[1].get("options") is None

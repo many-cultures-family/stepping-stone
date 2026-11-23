@@ -4,6 +4,10 @@ uvicorn==0.54.0
 python-multipart==0.0.33
 # PDF 쪽수 확인 (US-01)
 pypdf==6.21.4
+# 문서 인식 OCR (OCR-API.md, F-01). torch가 같이 설치된다(약 1GB). 첫 실행 때 모델 95MB를 ~/.EasyOCR에 받는다
+easyocr==1.7.2
+# OCR 전에 PDF 쪽을 이미지로 바꿈 (OCR-API.md)
+pymupdf==2.1
 # Google 로그인(OAuth 2.0 / OpenID Connect). HTTP 호출은 위의 httpx2를 쓴다 (LOGIN-API.md)
 Authlib==1.9.5
 # Starlette SessionMiddleware 서명 쿠키 (LOGIN-API.md)

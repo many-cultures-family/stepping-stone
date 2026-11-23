@@ -2,6 +2,7 @@
 // 명세가 나오면 이 파일의 실서버 호출만 채운다.
 import { USE_MOCK } from './client.js'
 import * as mock from '../mocks/priorInfo.js'
+import { startWriting as startWritingApi } from './writing.js'
 
 const notReady = () => Promise.reject(new Error('사전 정보 API는 아직 없어요'))
 
@@ -15,7 +16,7 @@ export function savePriorInfo(values) {
   return USE_MOCK ? mock.savePriorInfo(values) : notReady()
 }
 
-/** 사전 정보 입력을 마치고 작성 단계로 (단계 전이 API 는 아직 없다) */
+/** 사전 정보 입력을 마치고 작성 단계로 (VIRTUAL-FORM-API.md 항목 2 `POST .../writing:start`) */
 export function startWriting(draftId) {
-  return USE_MOCK ? mock.startWriting(draftId) : notReady()
+  return USE_MOCK ? mock.startWriting(draftId) : startWritingApi(draftId)
 }
