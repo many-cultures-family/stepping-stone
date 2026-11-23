@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Box, Button, ButtonBase, CircularProgress, Stack, Typography } from '@mui/material'
-import { recognizeDocument, reuploadDocument, REUPLOAD_AVAILABLE, uploadDocument } from '../api/documents.js'
+import { recognizeDocument, reuploadDocument, uploadDocument } from '../api/documents.js'
 import { useAuth } from '../auth/useAuth.js'
 import { AlertCircleIcon, CheckCircleIcon, DocumentIcon, ShieldIcon, UploadIcon } from '../components/icons.jsx'
 import PageHero from '../components/PageHero.jsx'
@@ -58,14 +58,9 @@ const TIPS = [
 export default function UploadPage({ replaceDraftId = null }) {
   const { setLoggedOut } = useAuth()
   // 문서를 바꿀 반려 건 id. 이 화면에서 다시 반려되면 그 건으로 바뀐다 (새로 올린 건이 반려된 경우 포함)
-  const [replaceId, setReplaceId] = useState(REUPLOAD_AVAILABLE ? replaceDraftId : null)
+  const [replaceId, setReplaceId] = useState(replaceDraftId)
   // 이 작성 건에는 더 올릴 수 없다고 서버가 답했을 때(반려 아님·없음·권한 없음). '다시 시도'로 새 건이 생기지 않게 막는다
   const [reuploadBlocked, setReuploadBlocked] = useState(false)
-
-  // 다시 올리기 API 가 없는 실서버에서 /drafts/:id/reupload 로 들어오면 새 작성 건 올리기 주소로 바꾼다 (북마크·공유 주소)
-  useEffect(() => {
-    if (replaceDraftId && !REUPLOAD_AVAILABLE) navigate('/upload', { replace: true })
-  }, [replaceDraftId])
   const [file, setFile] = useState(null)
   const [dragging, setDragging] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -151,7 +146,7 @@ export default function UploadPage({ replaceDraftId = null }) {
     setReplaceId(id)
   }
 
-  const canReupload = REUPLOAD_AVAILABLE && rejected
+  const canReupload = rejected
 
   const hero = !draft
     ? replaceId

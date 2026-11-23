@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Box, Button, CircularProgress, Stack, Typography } from '@mui/material'
-import { USE_MOCK } from '../api/client.js'
 import { getPriorInfo } from '../api/priorInfo.js'
 import { getForm, pageImageUrl } from '../api/writing.js'
 import { useAuth } from '../auth/useAuth.js'
@@ -8,7 +7,6 @@ import { AlertCircleIcon, CheckCircleIcon, PenIcon, ShieldIcon } from '../compon
 import PageHero from '../components/PageHero.jsx'
 import DiffLine from '../components/virtual-form/DiffLine.jsx'
 import { Container, Pill } from '../components/ui.jsx'
-import { MOCK_FIELDS } from '../mocks/writing.js'
 import { navigate } from '../router.js'
 import { ds, radius, squircle } from '../theme.js'
 import { loadDraftInput, saveDraftInput } from '../utils/browserStore.js'
@@ -274,7 +272,7 @@ export default function WritingPage({ draftId }) {
 
 function FormPage({ draftId, page, fields, values, errors, mismatch, touched, showMissing, focusedId, inputRefs, onChange, onFocus, onBlur }) {
   const url = pageImageUrl(draftId, page)
-  const [imgState, setImgState] = useState(url ? 'loading' : 'ready')
+  const [imgState, setImgState] = useState('loading')
   // 페이지 높이/폭 (칸 높이 → 글자 크기 계산용). 원본을 읽으면 실제 비율로 바꾼다
   const [ratio, setRatio] = useState(1.414)
 
@@ -292,33 +290,27 @@ function FormPage({ draftId, page, fields, values, errors, mismatch, touched, sh
         containerType: 'inline-size',
       }}
     >
-      {url ? (
-        <>
-          <Box
-            component="img"
-            src={url}
-            alt={`올린 원본 ${page}쪽`}
-            onLoad={(e) => {
-              const { naturalWidth: w, naturalHeight: h } = e.currentTarget
-              if (w && h) setRatio(h / w)
-              setImgState('ready')
-            }}
-            onError={() => setImgState('error')}
-            sx={{ display: 'block', width: '100%', minHeight: imgState === 'ready' ? 0 : 400 }}
-          />
-          {imgState === 'loading' && (
-            <Box sx={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
-              <CircularProgress size={28} aria-label="원본 불러오는 중" />
-            </Box>
-          )}
-          {imgState === 'error' && (
-            <Typography role="status" sx={{ position: 'absolute', top: 16, left: 0, right: 0, textAlign: 'center', color: ds.text2 }}>
-              원본 {page}쪽을 불러오지 못했어요. 칸만 보여 드려요.
-            </Typography>
-          )}
-        </>
-      ) : (
-        <MockPage />
+      <Box
+        component="img"
+        src={url}
+        alt={`올린 원본 ${page}쪽`}
+        onLoad={(e) => {
+          const { naturalWidth: w, naturalHeight: h } = e.currentTarget
+          if (w && h) setRatio(h / w)
+          setImgState('ready')
+        }}
+        onError={() => setImgState('error')}
+        sx={{ display: 'block', width: '100%', minHeight: imgState === 'ready' ? 0 : 400 }}
+      />
+      {imgState === 'loading' && (
+        <Box sx={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
+          <CircularProgress size={28} aria-label="원본 불러오는 중" />
+        </Box>
+      )}
+      {imgState === 'error' && (
+        <Typography role="status" sx={{ position: 'absolute', top: 16, left: 0, right: 0, textAlign: 'center', color: ds.text2 }}>
+          원본 {page}쪽을 불러오지 못했어요. 칸만 보여 드려요.
+        </Typography>
       )}
 
       {fields.map((f) => (
@@ -717,65 +709,5 @@ function MismatchNote({ state, prior, current, onUseSaved, onKeep }) {
         )}
       </Stack>
     </Box>
-  )
-}
-
-// 목 모드 샘플 서식 (A4 비율). MOCK_FIELDS 위치에 라벨을 그린다. 실제 개인정보는 없다
-function MockPage() {
-  const W = 1000
-  const H = 1414
-  const rows = MOCK_FIELDS.filter((f) => f.bbox.w < 0.15)
-  const top = Math.min(...rows.map((f) => f.bbox.y)) - 0.012
-  const rowH = 0.045
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block' }} role="img" aria-label={USE_MOCK ? '샘플 신청서' : undefined}>
-      <rect width={W} height={H} fill="#fff" />
-      <text x={W / 2} y={0.075 * H} textAnchor="middle" fontSize="40" fontWeight="700" fill={ds.ink}>
-        보육료 지원 신청서 (샘플)
-      </text>
-      <rect x={0.08 * W} y={top * H} width={0.84 * W} height={rows.length * rowH * H} fill="none" stroke={ds.ink} strokeWidth="2" />
-      <line x1={0.3 * W} x2={0.3 * W} y1={top * H} y2={(top + rows.length * rowH) * H} stroke={ds.ink} strokeWidth="1.5" />
-      {rows.map((f, i) => (
-        <g key={f.field_id}>
-          {i > 0 && <line x1={0.08 * W} x2={0.92 * W} y1={(top + i * rowH) * H} y2={(top + i * rowH) * H} stroke={ds.ink} strokeWidth="1.5" />}
-          <text x={f.bbox.x * W} y={(f.bbox.y + f.bbox.h * 0.8) * H} fontSize="22" fill={ds.ink}>
-            {f.label}
-          </text>
-        </g>
-      ))}
-      <text x={0.1 * W} y={0.413 * H} fontSize="20" fill={ds.ink}>
-        ※ 개인정보 수집·이용에 동의합니까? 동의하지 않으면 지원이 제한될 수 있습니다.
-      </text>
-      <text x={0.588 * W} y={0.4395 * H} fontSize="22" fill={ds.ink} textAnchor="end">
-        동의합니다
-      </text>
-      <rect x={0.6 * W} y={0.4295 * H} width="16" height="16" fill="none" stroke={ds.ink} strokeWidth="2" />
-      <text x={0.848 * W} y={0.4395 * H} fontSize="22" fill={ds.ink} textAnchor="end">
-        동의하지 않습니다
-      </text>
-      <rect x={0.86 * W} y={0.4295 * H} width="16" height="16" fill="none" stroke={ds.ink} strokeWidth="2" />
-      <text x={0.3 * W} y={0.475 * H} fontSize="22" fill={ds.ink}>
-        위와 같이 보육료 지원을 신청합니다.
-      </text>
-      {[
-        ['년', 0.53],
-        ['월', 0.61],
-        ['일', 0.69],
-      ].map(([t, x]) => (
-        <text key={t} x={x * W} y={0.516 * H} fontSize="22" fill={ds.ink}>
-          {t}
-        </text>
-      ))}
-      <text x={0.38 * W} y={0.568 * H} fontSize="22" fill={ds.ink}>
-        신청인 성명:
-      </text>
-      <line x1={0.5 * W} x2={0.76 * W} y1={0.569 * H} y2={0.569 * H} stroke={ds.ink} strokeWidth="1.5" />
-      <text x={0.78 * W} y={0.567 * H} fontSize="18" fill={ds.ink}>
-        (서명 또는 인)
-      </text>
-      <text x={W / 2} y={0.64 * H} textAnchor="middle" fontSize="34" fontWeight="700" fill={ds.ink}>
-        가나구청장 귀하
-      </text>
-    </svg>
   )
 }

@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Box, Button, ButtonBase, CircularProgress, Collapse, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Skeleton, Snackbar, Stack, Typography } from '@mui/material'
-import { USE_MOCK } from '../api/client.js'
-import { confirmFields, editField, FIELD_EDIT_AVAILABLE, inferFields, requestReanalysis } from '../api/fields.js'
+import { confirmFields, inferFields, requestReanalysis } from '../api/fields.js'
 import { REANALYSIS_LIMIT } from '../api/limits.js'
 import { useAuth } from '../auth/useAuth.js'
 import DocumentPreview from '../components/DocumentPreview.jsx'
-import FieldEditSheet from '../components/FieldEditSheet.jsx'
 import FieldRow from '../components/FieldRow.jsx'
 import TermChips from '../components/explain/TermChips.jsx'
 import { CheckCircleIcon, ChevronIcon, SparkleIcon } from '../components/icons.jsx'
@@ -48,8 +46,6 @@ export default function FieldCheckPage({ draftId, file, onDone, onNext, onReuplo
   const [fields, setFields] = useState([])
   const [serverErrors, setServerErrors] = useState([])
   const [selectedId, setSelectedId] = useState(null)
-  const [editingId, setEditingId] = useState(null)
-  const [editState, setEditState] = useState({ busy: false, error: null })
   const [busy, setBusy] = useState(null) // 'confirm' | 'reanalyze' | null
   const [toast, setToast] = useState(null)
   const [confirmed, setConfirmed] = useState(null)
@@ -110,7 +106,6 @@ export default function FieldCheckPage({ draftId, file, onDone, onNext, onReuplo
   const flaggedIds = fields.filter((f) => f.flagged_wrong).map((f) => f.id)
   const requiredCount = fields.filter((f) => f.required === true).length
   const optionalCount = fields.filter((f) => f.required === false).length
-  const editingField = fields.find((f) => f.id === editingId)
   const reanalysisLeft = draft ? REANALYSIS_LIMIT - draft.reanalysis_count : 0
 
   function select(id) {
@@ -126,28 +121,6 @@ export default function FieldCheckPage({ draftId, file, onDone, onNext, onReuplo
 
   function toggleFlag(id) {
     setFields((prev) => prev.map((f) => (f.id === id ? { ...f, flagged_wrong: !f.flagged_wrong } : f)))
-  }
-
-  // 수정 창 저장 (api/fields.js editField, 실서버 API 는 [가정]이라 FIELD_EDIT_AVAILABLE 일 때만 창이 열린다).
-  // 저장하는 동안 창을 잠그고, 실패하면 창을 닫지 않고 그 안에 문구를 보여 준다
-  async function saveField(next) {
-    setEditState({ busy: true, error: null })
-    try {
-      const data = await editField(draftId, next)
-      // 저장 사이에 바뀐 '원본과 달라요' 표시를 지키도록 최신 화면 상태에서 읽는다
-      setFields((prev) => {
-        const flagged = new Set(prev.filter((f) => f.flagged_wrong).map((f) => f.id))
-        return data.fields.map((f) => ({ ...f, flagged_wrong: flagged.has(f.id) }))
-      })
-      setDraft(data.draft)
-      setServerErrors(data.errors ?? [])
-      setEditingId(null)
-      setSelectedId(next.id)
-      setEditState({ busy: false, error: null })
-    } catch (e) {
-      if (e?.code === 'LOGIN_REQUIRED') setLoggedOut()
-      setEditState({ busy: false, error: errorText(e) })
-    }
   }
 
   async function handleConfirm() {
@@ -320,7 +293,6 @@ export default function FieldCheckPage({ draftId, file, onDone, onNext, onReuplo
                     errors={fieldErrors[f.id]}
                     selected={selectedId === f.id}
                     onSelect={select}
-                    onEdit={setEditingId}
                     onToggleFlag={toggleFlag}
                     disabled={busy !== null}
                     explainSlot={f.label ? <TermChips text={f.label} wholeLabel="항목 이름 풀이" /> : null}
@@ -352,22 +324,6 @@ export default function FieldCheckPage({ draftId, file, onDone, onNext, onReuplo
           </Box>
         </Box>
       </Container>
-
-      {FIELD_EDIT_AVAILABLE && editingField && (
-        <FieldEditSheet
-          key={editingField.id}
-          open
-          field={editingField}
-          busy={editState.busy}
-          error={editState.error}
-          onClose={() => {
-            if (editState.busy) return
-            setEditingId(null)
-            setEditState({ busy: false, error: null })
-          }}
-          onSave={saveField}
-        />
-      )}
 
       <Dialog open={reanalyzeAsk} onClose={() => setReanalyzeAsk(false)} aria-labelledby="reanalyze-title">
         <DialogTitle id="reanalyze-title">다시 분석할까요?</DialogTitle>
@@ -426,7 +382,7 @@ function ActionCard({ errorCount, flaggedCount, reanalysisLeft, busy, onReanalyz
           {ready ? '모든 칸을 확인할 수 있어요' : `확인이 필요한 항목 ${errorCount}개`}
         </Typography>
         <Typography variant="caption" sx={{ color: ds.text2 }}>
-          {ready ? '원본과 같다면 확인을 눌러 주세요.' : '빨간 항목의 수정을 눌러 고쳐 주세요.'}
+          {ready ? '원본과 같다면 확인을 눌러 주세요.' : "빨간 항목에 '원본과 달라요'를 켜고 다시 분석해 주세요."}
         </Typography>
       </Box>
       <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>

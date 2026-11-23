@@ -1,8 +1,7 @@
 // 서술형 답변 검토 API (F-06, US-05). 기준: DATA-MODEL.md (field_answer, review_suggestion).
 // F-06 API 명세(docs/api)가 아직 없다. 아래 경로·응답 모양은 모두 [제안]이고, 명세가 나오면 이 파일만 고친다.
-// VITE_USE_MOCK=true 에서는 src/mocks/review.js 가 응답한다. LLM 은 서버에서만 부른다.
-import { request, USE_MOCK } from './client.js'
-import * as mock from '../mocks/review.js'
+// LLM 은 서버에서만 부른다.
+import { request } from './client.js'
 
 /**
  * 검토할 서술형 답변 목록 GET /api/drafts/{id}/review [제안]
@@ -10,7 +9,6 @@ import * as mock from '../mocks/review.js'
  * 실패: 401 LOGIN_REQUIRED, 403, 404 DRAFT_NOT_FOUND
  */
 export function getReview(draftId) {
-  if (USE_MOCK) return mock.getReview(draftId)
   return request(`/drafts/${draftId}/review`)
 }
 
@@ -22,7 +20,6 @@ export function getReview(draftId) {
  * 화면은 api/privacy.js 로 감지·결정을 먼저 마친 뒤에만 이 함수를 부른다 (hooks/useAnswerReview.js).
  */
 export function requestReview(draftId) {
-  if (USE_MOCK) return mock.requestReview(draftId)
   return request(`/drafts/${draftId}/review:request`, { method: 'POST', body: {} })
 }
 
@@ -31,12 +28,14 @@ export function requestReview(draftId) {
  * 본문 { decision: '반영' | '무시' | '미결정' } → { id, decision }
  */
 export function decideSuggestion(draftId, suggestionId, decision) {
-  if (USE_MOCK) return mock.decideSuggestion(draftId, suggestionId, decision)
   return request(`/drafts/${draftId}/review/suggestions/${suggestionId}`, { method: 'PATCH', body: { decision } })
 }
 
-/** 검토 마치기 [목 전용] 단계 전이(review → 성공) API 는 아직 없다. 목에서만 작성 목록에 반영한다 */
-export function finishReview(draftId) {
-  if (!USE_MOCK) return Promise.reject(new Error('검토 마치기 API는 아직 없어요'))
-  return mock.finishReview(draftId)
+/**
+ * 검토 마치기 POST /api/drafts/{id}:complete (REVIEW-PRIVACY-API.md [제안]) — R9 완성 조건 4개를 브라우저가 센 숫자만 보낸다
+ * 본문 { remaining_required, unacknowledged_mismatches, undecided_suggestions, undecided_privacy }
+ * 실패: 409 REVIEW_NOT_DONE, 400 INVALID_COMPLETE_REQUEST
+ */
+export function finishReview(draftId, counts) {
+  return request(`/drafts/${draftId}:complete`, { method: 'POST', body: counts })
 }

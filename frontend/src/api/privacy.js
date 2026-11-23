@@ -1,9 +1,7 @@
 // 서술형 답변 개인정보 감지 API (F-07, US-05, R7). 기준: DATA-MODEL.md privacy_detection.
 // F-07 API 명세(docs/api)가 아직 없다. 아래 경로·응답 모양은 모두 [제안]이고, 명세가 나오면 이 파일만 고친다.
-// VITE_USE_MOCK=true 에서는 src/mocks/privacy.js 가 응답한다.
 // 감지는 서버 규칙(정규식)으로 한다. 화면은 결과를 보여 주고 사용자의 결정만 모아 보낸다.
-import { request, USE_MOCK } from './client.js'
-import * as mock from '../mocks/privacy.js'
+import { request } from './client.js'
 
 /**
  * 개인정보 감지 POST /api/drafts/{id}/privacy:detect [제안]
@@ -14,7 +12,6 @@ import * as mock from '../mocks/privacy.js'
  * 실패: 401 LOGIN_REQUIRED, 403 FORBIDDEN_DRAFT, 404 DRAFT_NOT_FOUND, 409 DRAFT_STEP_INVALID
  */
 export function detectPrivacy(draftId) {
-  if (USE_MOCK) return mock.detectPrivacy(draftId)
   return request(`/drafts/${draftId}/privacy:detect`, { method: 'POST', body: {} })
 }
 
@@ -26,6 +23,5 @@ export function detectPrivacy(draftId) {
  * 실패: 400 DECISION_INVALID, 404 DETECTION_NOT_FOUND, 그 외 detectPrivacy 와 같음
  */
 export function decidePrivacy(draftId, decisions) {
-  if (USE_MOCK) return mock.decidePrivacy(draftId, decisions)
   return request(`/drafts/${draftId}/privacy:decide`, { method: 'POST', body: { decisions } })
 }
