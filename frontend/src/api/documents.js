@@ -28,3 +28,13 @@ export function recognizeDocument(draftId) {
   if (USE_MOCK) return mock.recognizeDocument(draftId)
   return request(`/drafts/${draftId}/document:recognize`, { method: 'POST' })
 }
+
+/**
+ * 원본 한 페이지 이미지 주소 (`GET /api/drafts/{id}/document/pages/{page}`, page 는 1부터, VIRTUAL-FORM-API.md 항목 3 [제안]).
+ * 단계 제한이 없어 F-02 입력 항목 확인 미리보기와 F-04 가상 작성이 같이 쓴다. 취소된 건은 404 DOCUMENT_NOT_FOUND,
+ * 없는 쪽은 404 PAGE_NOT_FOUND. PDF 는 서버가 PNG 로 그려 준다. 목 모드에서는 null (화면이 샘플 서식·메모리 파일을 대신 쓴다).
+ */
+export function pageImageUrl(draftId, page) {
+  if (USE_MOCK) return null
+  return `/api/drafts/${draftId}/document/pages/${page}`
+}

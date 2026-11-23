@@ -1,4 +1,4 @@
-// 가상 작성(F-04) API. docs/api/VIRTUAL-FORM-API.md 항목 1·2 + 원본 페이지 이미지(명세에 없음).
+// 가상 작성(F-04) API. docs/api/VIRTUAL-FORM-API.md 항목 1·2 (+ 원본 페이지 이미지 주소는 documents.js).
 // 입력값·사전 정보는 서버에 보내지 않는다 (no-server-storage-user-input.md). 서버는 칸 정보·형식 규칙·원본 이미지만 준다.
 import { request, USE_MOCK } from './client.js'
 import * as mock from '../mocks/writing.js'
@@ -21,11 +21,5 @@ export function startWriting(draftId) {
   return request(`/drafts/${draftId}/writing:start`, { method: 'POST' })
 }
 
-/**
- * 원본 한 페이지 이미지 주소 (`GET /api/drafts/{id}/document/pages/{page}`, page 는 1부터). 명세에 없는 API.
- * PDF 는 서버가 PNG 로 그려 준다. 목 모드에서는 null (화면이 샘플 서식을 대신 그린다).
- */
-export function pageImageUrl(draftId, page) {
-  if (USE_MOCK) return null
-  return `/api/drafts/${draftId}/document/pages/${page}`
-}
+// 원본 한 페이지 이미지 주소는 F-02 미리보기도 같이 쓰므로 documents.js 에 둔다
+export { pageImageUrl } from './documents.js'

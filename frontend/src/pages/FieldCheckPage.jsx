@@ -273,6 +273,7 @@ export default function FieldCheckPage({ draftId, file, onDone, onNext, onReuplo
             </Stack>
             <Collapse in={previewOpen}>
               <DocumentPreview
+                draftId={draftId}
                 file={file}
                 fields={fields}
                 selectedId={selectedId}
