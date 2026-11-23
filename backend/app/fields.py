@@ -1,5 +1,6 @@
 # F-02 입력 항목 추론·확정 (FIELD-CHECK-API.md, US-02·US-03). 로그인·소유자 확인 필요
 import json
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,6 +9,7 @@ from pydantic import BaseModel
 from app import auth, db, llm
 
 router = APIRouter(prefix="/api")
+logger = logging.getLogger(__name__)
 
 # 작성 건 하나에 재분석 3회까지 (DATA-MODEL.md 44행 [제안])
 MAX_REANALYSIS_COUNT = 3
@@ -199,7 +201,11 @@ def infer_fields(
                 existing_fields=existing_fields if is_reanalysis else None,
                 flagged_field_ids=flagged_field_ids if is_reanalysis else None,
             )
-        except llm.LLMCallError:
+        except llm.LLMCallError as exc:
+            # 원인(설정 누락·키 오류·응답 형식)을 서버 로그로 남긴다. 응답에는 코드만 준다.
+            # 메시지에는 API 키·원문이 들어가지 않는다(키는 URL에만 있고 urllib 오류 문구에 안 나옴).
+            # 응답 형식 오류 문구에 L1 응답 일부가 붙을 수 있어 앞부분만 남긴다
+            logger.warning("작성 건(%s) L1 호출 실패: %s", draft_id, str(exc)[:200])
             # 상태·단계는 바꾸지 않고 사용자가 다시 시도할 수 있게 한다 (FIELD-CHECK-API.md)
             raise HTTPException(status_code=502, detail={"code": "LLM_CALL_FAILED"})
 

@@ -233,6 +233,15 @@ class TestOcrMisread(unittest.TestCase):
         self.assertEqual(normalize_ocr_text("결혼이민(F-6)"), "결혼이민(F-6)")
         self.assertEqual(normalize_ocr_text("Tel O1O-0000-1234"), "Tel 010-0000-1234")
 
+    def test_blank_name_before_sign_mark_not_masked(self):
+        """'성명: ____ (인)'은 빈칸이다. '(인)'까지 이름으로 가리면 서명란이 사라진다."""
+        r = mask("작성자 성명: ____________ (인)", "보호자 성명: (서명 또는 인)")
+        self.assertEqual(
+            r.masked_text, "작성자 성명: ____________ (인)\n보호자 성명: (서명 또는 인)"
+        )
+        r = mask("작성자 성명: 홍길동 (인)")
+        self.assertEqual(r.lines[0].text, "작성자 성명: [이름] (인)")
+
     def test_sentence_starting_with_label_word_not_masked(self):
         """'연락처로', '이번일은'처럼 라벨 글자 뒤에 한글이 붙으면 라벨이 아니다."""
         r = mask("이번일은 연락처로 알려 드립니다")

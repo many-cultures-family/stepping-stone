@@ -19,6 +19,8 @@ export const FORMATS = [
   { code: 'short_text', label: '짧은 글', example: '100자 이내' },
   { code: 'long_text', label: '서술형', example: '여러 줄 글' },
   { code: 'choice', label: '선택형', example: '보기 중 하나 고르기' },
+  // 서명·날인 칸. 서비스는 값을 받지 않고 직접 서명하라고 안내만 한다 (R10, 서버 db.py 시드와 같음)
+  { code: 'signature', label: '서명', example: '직접 서명 또는 도장' },
 ]
 const formatOf = (code) => FORMATS.find((f) => f.code === code) ?? null
 

@@ -145,6 +145,9 @@ _LABELS: list[tuple[str, re.Pattern[str]]] = [
 _STOP_LABELS = re.compile(
     r"(?<!\S)(?:신청인|신청일|접수일|작성일|배우자|자녀|국적|성별|체류자격|서명|날짜|일자)"
 )
+# 서명란 표시. 이름 칸 값은 여기서 끝난다: "작성자 성명: ____ (인)"의 '____ (인)'을 이름으로 가리면
+# 빈칸인데도 가려지고 L1이 서명란을 못 본다 (2026-11-23 실측: "작성자 성명: ([이름])")
+_SIGN_MARK = re.compile(r"\(\s*(?:인|서명(?:\s*또는\s*인)?|날인)\s*\)")
 # OCR이 숫자를 글자로 읽는 경우: 숫자 덩어리 안의 O·o → 0, l·I·| → 1 (normalize_ocr_text)
 _DIGITISH = re.compile(
     r"(?<![A-Za-z가-힣])[0-9OoIl|](?:[0-9OoIl|.\-]|\s(?=[0-9OoIl|]))*[0-9OoIl|](?![A-Za-z가-힣])"
@@ -243,6 +246,7 @@ def _spans(text: str) -> list[Finding]:
     stops = (
         [s for s, _, _ in label_hits]
         + [m.start() for m in _STOP_LABELS.finditer(text)]
+        + [m.start() for m in _SIGN_MARK.finditer(text)]
         + [f.start for f in found]
         + [len(text)]
     )
