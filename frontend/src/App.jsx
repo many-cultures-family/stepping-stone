@@ -6,6 +6,7 @@ import { startWriting } from './api/priorInfo.js'
 import { AuthProvider } from './auth/AuthContext.jsx'
 import { LOGIN_ERROR_MESSAGES } from './auth/loginErrors.js'
 import { useAuth } from './auth/useAuth.js'
+import { ExplainProvider } from './explain/ExplainProvider.jsx'
 import Layout from './components/Layout.jsx'
 import LoginRequired from './components/LoginRequired.jsx'
 import { Container } from './components/ui.jsx'
@@ -117,21 +118,27 @@ function PriorInfoRoute({ draftId, language }) {
   )
 }
 
-// F-06 서술형 답변 검토. 데이터·검토 요청은 api/review.js(명세 전이라 [제안], 목 전용)를 거친다.
+// F-06 서술형 답변 검토 + F-07 개인정보 감지. 데이터는 api/review.js·api/privacy.js(명세 전이라 [제안], 목 전용)를 거친다.
 function AnswerReviewRoute({ draftId }) {
-  const { loaded, answers, suggestions, reviewStatus, errorCode, request, decide } = useAnswerReview(draftId)
+  const review = useAnswerReview(draftId)
   const { busy, error, run, clearError } = useSingleFlight()
-  if (!loaded) return <Loading />
+  if (!review.loaded) return <Loading />
   return (
     <>
       <ActionError error={error} onClose={clearError} />
       <AnswerReviewPage
-        answers={answers}
-        suggestions={suggestions}
-        reviewStatus={reviewStatus}
-        errorCode={errorCode}
-        onRequestReview={request}
-        onDecide={decide}
+        answers={review.answers}
+        suggestions={review.suggestions}
+        reviewStatus={review.reviewStatus}
+        errorCode={review.errorCode}
+        detections={review.detections}
+        pendingDetections={review.pendingDetections}
+        privacyError={review.privacyError}
+        privacySaving={review.privacySaving}
+        onRequestReview={review.request}
+        onConfirmPrivacy={review.confirmPrivacy}
+        onCancelPrivacy={review.cancelPrivacy}
+        onDecide={review.decide}
         // 요청 중에는 undefined 를 넘겨 '검토 마치기' 버튼을 끈다(AnswerReviewPage 의 canFinish)
         onFinish={busy ? undefined : () => run(() => finishReview(draftId).then(() => navigate('/drafts')))}
         onBack={() => navigate('/drafts')}
@@ -208,7 +215,10 @@ function Loading() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      {/* F-05 단어·문장 설명: 로그인한 사용자의 언어로 용어 사전을 불러와 화면 전체에서 같이 쓴다 */}
+      <ExplainProvider>
+        <AppContent />
+      </ExplainProvider>
     </AuthProvider>
   )
 }

@@ -17,7 +17,9 @@ export function getReview(draftId) {
 /**
  * 검토 요청 POST /api/drafts/{id}/review:request [제안] (L3). 답변을 서버가 마스킹한 뒤 LLM 에 보낸다.
  * → { suggestions: [{ id, field_answer_id, kind, suggested_text, explanation, decision: '미결정' }] }
- * 실패: 400 ANSWER_EMPTY(빈 답변), 401, 404, 502 LLM_CALL_FAILED
+ * 실패: 400 ANSWER_EMPTY(빈 답변), 401, 404, 502 LLM_CALL_FAILED,
+ *       409 PRIVACY_UNDECIDED(감지된 개인정보 중 결정 전인 것이 있음, R7) [제안 — 서버에 아직 없음]
+ * 화면은 api/privacy.js 로 감지·결정을 먼저 마친 뒤에만 이 함수를 부른다 (hooks/useAnswerReview.js).
  */
 export function requestReview(draftId) {
   if (USE_MOCK) return mock.requestReview(draftId)

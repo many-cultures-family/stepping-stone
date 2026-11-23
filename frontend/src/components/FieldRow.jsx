@@ -8,7 +8,8 @@ import { Pill } from './ui.jsx'
 // 입력 항목 카드: 누르면 원본 칸을 강조(onSelect). '원본과 달라요' 표시는 카드 아래 스위치로 한다.
 // '수정' 버튼은 명세에 없는 기능이라 목 모드에서만 보인다.
 // 확인만 할 때는 아무것도 누르지 않아도 된다 (제로 클릭).
-export default function FieldRow({ field, errors = [], selected, onSelect, onEdit, onToggleFlag, index, disabled = false }) {
+// explainSlot: 카드 아래에 붙일 '말 뜻' 칩 줄 (F-05). 카드 본문이 버튼이라 그 안에는 넣을 수 없어서 따로 받는다.
+export default function FieldRow({ field, errors = [], selected, onSelect, onEdit, onToggleFlag, index, disabled = false, explainSlot = null }) {
   const hasError = errors.length > 0
   const bg = hasError ? ds.redSoft : selected ? ds.white : ds.card
   const ring = selected ? `inset 0 0 0 2px ${hasError ? ds.red : ds.primary}` : 'none'
@@ -136,6 +137,8 @@ export default function FieldRow({ field, errors = [], selected, onSelect, onEdi
           수정
         </Button>
       )}
+
+      {explainSlot && <Box sx={{ px: { xs: 2.5, md: 3 }, pl: { sm: 9 }, pb: 0.5 }}>{explainSlot}</Box>}
 
       <Stack
         component="label"

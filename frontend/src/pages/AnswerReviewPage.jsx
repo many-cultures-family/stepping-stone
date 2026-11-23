@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Alert, Box, Button, CircularProgress, Stack, Typography } from '@mui/material'
 import AnswerReviewCard from '../components/answer-review/AnswerReviewCard.jsx'
+import PrivacyDecisionDialog from '../components/answer-review/PrivacyDecisionDialog.jsx'
 import { SparkleIcon } from '../components/icons.jsx'
 import PageHero from '../components/PageHero.jsx'
 import { Container } from '../components/ui.jsx'
@@ -10,6 +11,7 @@ import { ds, radius, squircle } from '../theme.js'
 const ERROR_TEXT = {
   LOGIN_REQUIRED: '로그인이 필요해요. 다시 로그인해 주세요.',
   LLM_CALL_FAILED: 'AI 검토를 받지 못했어요. 잠시 후 다시 시도해 주세요.',
+  PRIVACY_UNDECIDED: '개인정보를 어떻게 할지 먼저 정해야 AI 검토를 받을 수 있어요.',
   NETWORK_ERROR: '서버 연결 실패. 잠시 후 다시 시도해 주세요.',
 }
 const errorText = (code) => ERROR_TEXT[code] ?? '문제가 생겼어요. 다시 시도해 주세요.'
@@ -22,7 +24,10 @@ const errorText = (code) => ERROR_TEXT[code] ?? '문제가 생겼어요. 다시 
 // - 데이터 모양은 DATA-MODEL.md 를 따른다.
 //   answers:     [{ id(field_answer id), label(칸 제목), guide(안내 문구), value(사용자 답변) }]
 //   suggestions: [{ id, field_answer_id, kind(맞춤법·문법·질문 의도·보충), suggested_text, explanation, decision }]
-// - reviewStatus: 'idle'(검토 요청 전) · 'loading' · 'done' · 'error'
+// - reviewStatus: 'idle'(검토 요청 전) · 'checking'(개인정보 감지 중) · 'privacy'(개인정보 결정 기다림) · 'loading'(AI 검토 중) · 'done' · 'error'
+// - F-07(R7): 'AI 검토 받기'를 누르면 먼저 개인정보를 감지한다. 감지된 것이 있으면 PrivacyDecisionDialog 로
+//   사용자가 하나씩 정하고, 모두 정해야 AI 검토를 요청한다. 순서는 hooks/useAnswerReview.js 가 지킨다.
+//   detections: 결정이 끝난 감지 [{ id, field_answer_id, start, end, kind, decision }] — 답변 카드에 표시한다
 // - 제안은 자동으로 반영하지 않는다(R6). 사용자가 고른 반영·무시는 화면 상태로 들고 있다가
 //   onDecide 로 알린다(서버 저장은 API 연결 때). 미결정이 하나라도 남으면 '검토 마치기'를 막는다(R9).
 export default function AnswerReviewPage({
@@ -30,13 +35,25 @@ export default function AnswerReviewPage({
   suggestions = [],
   reviewStatus = 'idle',
   errorCode = null,
+  detections = [],
+  pendingDetections = [],
+  privacyError = null,
+  privacySaving = false,
   onRequestReview,
+  onConfirmPrivacy,
+  onCancelPrivacy,
   onDecide,
   onFinish,
   onBack,
 }) {
   // 사용자가 화면에서 고른 결정. props 의 decision 위에 덮어쓴다.
   const [picked, setPicked] = useState({})
+  // 새 검토 결과(suggestions 배열이 바뀜)가 오면 고른 결정을 비운다. 개인정보 모달을 닫아 검토를 안 받았으면 그대로 둔다
+  const [pickedFor, setPickedFor] = useState(suggestions)
+  if (pickedFor !== suggestions) {
+    setPickedFor(suggestions)
+    setPicked({})
+  }
 
   const decided = useMemo(
     () => suggestions.map((s) => ({ ...s, decision: picked[s.id] ?? s.decision ?? '미결정' })),
@@ -46,7 +63,8 @@ export default function AnswerReviewPage({
   const pendingCount = reviewed ? decided.filter((s) => s.decision === '미결정').length : 0
   const emptyAnswers = answers.filter((a) => !a.value?.trim())
   // 서술형 답변을 비워 두면 검토를 거절한다 (US-05 인수 조건)
-  const canRequest = Boolean(onRequestReview) && answers.length > 0 && emptyAnswers.length === 0 && reviewStatus !== 'loading'
+  const busy = ['checking', 'privacy', 'loading'].includes(reviewStatus)
+  const canRequest = Boolean(onRequestReview) && answers.length > 0 && emptyAnswers.length === 0 && !busy
   const canFinish = reviewed && pendingCount === 0 && Boolean(onFinish)
 
   const decide = (id, decision) => {
@@ -54,10 +72,7 @@ export default function AnswerReviewPage({
     onDecide?.(id, decision)
   }
 
-  const requestReview = () => {
-    setPicked({})
-    onRequestReview()
-  }
+  const requestReview = () => onRequestReview()
 
   return (
     <>
@@ -91,6 +106,7 @@ export default function AnswerReviewPage({
                   answer={answer}
                   reviewed={reviewed}
                   suggestions={decided.filter((s) => s.field_answer_id === answer.id)}
+                  detections={detections.filter((d) => d.field_answer_id === answer.id && d.decision)}
                   onDecide={decide}
                 />
               ))}
@@ -111,13 +127,25 @@ export default function AnswerReviewPage({
           </Stack>
         )}
       </Container>
+
+      {reviewStatus === 'privacy' && (
+        <PrivacyDecisionDialog
+          open
+          detections={pendingDetections}
+          answers={answers}
+          saving={privacySaving}
+          errorCode={privacyError}
+          onConfirm={onConfirmPrivacy}
+          onCancel={onCancelPrivacy}
+        />
+      )}
     </>
   )
 }
 
 // 오른쪽(모바일은 아래) 요약: 검토 요청 → 남은 결정 수 → 검토 마치기
 function ReviewPanel({ reviewStatus, answerCount, emptyCount, suggestionCount, pendingCount, canRequest, canFinish, onRequest, onFinish, onBack }) {
-  const loading = reviewStatus === 'loading'
+  const loading = reviewStatus === 'loading' || reviewStatus === 'checking'
   const reviewed = reviewStatus === 'done'
 
   return (
@@ -140,7 +168,9 @@ function ReviewPanel({ reviewStatus, answerCount, emptyCount, suggestionCount, p
         <Box>
           <Typography sx={{ fontSize: 13, fontWeight: 700, color: ds.muted }}>서술형 답변 {answerCount}개</Typography>
           <Typography variant="h3" component="p" sx={{ fontSize: 22, mt: 0.5, wordBreak: 'keep-all' }} aria-live="polite">
-            {loading && 'AI가 답변을 읽고 있어요'}
+            {reviewStatus === 'checking' && '개인정보가 있는지 먼저 살펴보고 있어요'}
+            {reviewStatus === 'privacy' && '개인정보를 어떻게 할지 골라 주세요'}
+            {reviewStatus === 'loading' && 'AI가 답변을 읽고 있어요'}
             {reviewStatus === 'idle' && '검토를 받아 볼까요?'}
             {reviewStatus === 'error' && '검토를 받지 못했어요'}
             {reviewed && (suggestionCount === 0
@@ -161,8 +191,13 @@ function ReviewPanel({ reviewStatus, answerCount, emptyCount, suggestionCount, p
             onClick={onRequest}
             startIcon={loading ? <CircularProgress size={18} color="inherit" /> : <SparkleIcon size={16} />}
           >
-            {loading ? '검토 중이에요' : 'AI 검토 받기'}
+            {reviewStatus === 'checking' ? '확인하고 있어요' : loading ? '검토 중이에요' : 'AI 검토 받기'}
           </Button>
+        )}
+        {!reviewed && !loading && (
+          <Typography sx={{ fontSize: 13, color: ds.text2 }}>
+            AI에 보내기 전에 답변에 개인정보가 있는지 먼저 확인해요. 어떻게 할지는 직접 골라요.
+          </Typography>
         )}
 
         {reviewed && (

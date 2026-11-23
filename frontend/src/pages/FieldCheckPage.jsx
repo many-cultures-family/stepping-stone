@@ -7,6 +7,7 @@ import { useAuth } from '../auth/useAuth.js'
 import DocumentPreview from '../components/DocumentPreview.jsx'
 import FieldEditSheet from '../components/FieldEditSheet.jsx'
 import FieldRow from '../components/FieldRow.jsx'
+import TermChips from '../components/explain/TermChips.jsx'
 import { CheckCircleIcon, ChevronIcon, SparkleIcon } from '../components/icons.jsx'
 import LoginRequired from '../components/LoginRequired.jsx'
 import PageHero from '../components/PageHero.jsx'
@@ -309,6 +310,7 @@ export default function FieldCheckPage({ draftId, file, onDone, onNext, onReuplo
                     onEdit={setEditingId}
                     onToggleFlag={toggleFlag}
                     disabled={busy !== null}
+                    explainSlot={f.label ? <TermChips text={f.label} wholeLabel="항목 이름 풀이" /> : null}
                   />
                 ))}
               </Stack>
