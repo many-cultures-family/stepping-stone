@@ -42,7 +42,8 @@ npm run dev
 
 개발 서버는 `http://localhost:5173`에서 열린다.
 
-- `VITE_USE_MOCK=true`: 작성 목록·업로드·입력 항목·사전 정보·답변 검토를 `src/mocks` 목데이터로 처리한다. **로그인(Google)은 목이 없고 항상 백엔드를 쓴다**(`/api`는 FastAPI `VITE_API_PROXY_TARGET`, 기본 `http://localhost:8080`로 프록시).
+- `VITE_USE_MOCK=true`: 작성 목록·업로드·입력 항목·사전 정보·답변 검토를 `src/mocks` 목데이터로 처리한다. **로그인(Google)은 기본으로 항상 백엔드를 쓴다**(`/api`는 FastAPI `VITE_API_PROXY_TARGET`, 기본 `http://localhost:8080`로 프록시).
+- `VITE_MOCK_LOGIN=true`(`VITE_USE_MOCK=true`일 때만): 로그인도 가짜 세션(`src/mocks/auth.js`, 시드 사용자 `tester@example.com`, 언어 `vi`)을 쓴다. 백엔드·Google 설정 없이 로그인이 필요한 화면을 볼 수 있다. 처음부터 로그인된 상태이고, 로그아웃하면 그 탭에서는 로그아웃 상태가 유지된다. 실제 로그인을 확인할 때는 끈다.
 - `VITE_USE_MOCK=false`: 위 기능도 실서버를 쓴다. 사전 정보·답변 검토는 서버 API가 없어 화면이 열리지 않는다.
 
 ```bash
