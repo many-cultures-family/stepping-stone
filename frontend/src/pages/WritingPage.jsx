@@ -11,18 +11,19 @@ import { Container, Pill } from '../components/ui.jsx'
 import { MOCK_FIELDS } from '../mocks/writing.js'
 import { navigate } from '../router.js'
 import { ds, radius, squircle } from '../theme.js'
+import { loadDraftInput, saveDraftInput } from '../utils/browserStore.js'
 import { isMismatch, priorValueFor } from '../utils/priorMismatch.js'
 import { fontFor, formatError, inputRect, isInput, joinDate, splitDate } from '../utils/writingLayout.js'
 
 // F-04 가상 작성 (VIRTUAL-FORM-API.md 항목 1). 원본 페이지 이미지 위에, 칸 위치(bbox)마다 형식에 맞는 입력칸을 겹쳐 그린다.
-// - 입력값은 이 화면의 메모리에만 둔다. 서버에 보내지 않고(no-server-storage-user-input.md),
-//   브라우저 어디에 오래 둘지(localStorage 등)는 아직 정하지 않았다(data-flow.md 5절 #3) → 새로고침하면 지워진다
+// - 입력값은 서버에 보내지 않고(no-server-storage-user-input.md) 브라우저에만 둔다. [제안] sessionStorage(utils/browserStore.js):
+//   새로고침해도 남고 탭을 닫으면 지워진다. 작성 건을 취소하거나 로그아웃해도 지운다 (보관 위치는 data-flow.md 5절 #3 팀 결정 전)
 // - 형식 검사는 서버가 준 pattern 으로 브라우저가 한다 (R3, 규칙 출처는 서버 input_format 하나)
 // - 서명(signature) 칸은 입력받지 않고 '직접 서명' 자리만 표시한다 (R10)
 // - 실제 기관에 보내지 않는 연습 화면임을 알린다 (R4)
 // - 불일치: 사전 정보와 짝지어진 칸(prior_info_key)에 저장된 값과 다르게 쓰면 주황으로 알린다. 판정은 브라우저가 한다
 //   (VIRTUAL-FORM-API.md, utils/priorMismatch.js). 이사 전 주소처럼 일부러 다르게 쓴 칸은 '그대로 둘게요'로 확인만 남긴다
-//   (R3 예외). 확인은 그 값에만 붙어서, 값을 다시 고치면 다시 판정한다. 확인 기록도 이 화면 메모리에만 둔다
+//   (R3 예외). 확인은 그 값에만 붙어서, 값을 다시 고치면 다시 판정한다. 확인 기록도 입력값과 같이 브라우저에 둔다
 
 // API 오류 코드 → 문구
 const ERROR_TEXT = {
@@ -45,17 +46,33 @@ export default function WritingPage({ draftId }) {
   // '그대로 둘게요'로 확인한 칸: { [field_id]: 확인할 때의 값 }. 값이 바뀌면 확인이 풀린다
   const [acks, setAcks] = useState({})
   const inputRefs = useRef({})
+  const ready = state.status === 'ready'
+
+  // 쓰는 값·확인 기록을 브라우저에 남긴다 (새로고침해도 이어서 쓰게). 불러오기 전 빈 값으로 덮어쓰지 않게 ready 뒤에만
+  useEffect(() => {
+    if (ready) saveDraftInput(draftId, { values, acks })
+  }, [ready, draftId, values, acks])
 
   useEffect(() => {
     let cancelled = false
     getForm(draftId)
       .then(async (form) => {
-        // 사전 정보가 브라우저에 있으면 연결된 칸에 미리 채운다 (실서버 모드는 사전 정보 화면이 아직 없어 비어 있음)
         const prior = await getPriorInfo().catch(() => ({}))
         if (cancelled) return
-        const initial = {}
-        for (const f of form.fields) {
-          if (f.prior_info_key && prior[f.prior_info_key]) initial[f.field_id] = prior[f.prior_info_key]
+        // 이 탭에서 쓰던 값이 있으면 그대로 이어서 쓴다 (새로고침). 지금 칸 목록에 있는 칸 값만 살린다
+        const ids = new Set(form.fields.map((f) => String(f.field_id)))
+        const pick = (obj) => Object.fromEntries(Object.entries(obj ?? {}).filter(([id]) => ids.has(id)))
+        const saved = loadDraftInput(draftId)
+        let initial
+        if (saved) {
+          initial = pick(saved.values)
+          setAcks(pick(saved.acks))
+        } else {
+          // 처음 열면 사전 정보가 있는 칸을 미리 채운다
+          initial = {}
+          for (const f of form.fields) {
+            if (f.prior_info_key && prior?.[f.prior_info_key]) initial[f.field_id] = prior[f.prior_info_key]
+          }
         }
         setPrior(prior ?? {})
         setValues(initial)
@@ -245,7 +262,7 @@ export default function WritingPage({ draftId }) {
                 <ShieldIcon size={22} />
               </Box>
               <Typography variant="body2" sx={{ color: ds.primaryDeep, fontWeight: 600 }}>
-                연습용 화면이에요. 여기 쓴 내용은 기관에 보내지 않고 서버에도 저장하지 않아요. 새로고침하면 지워져요.
+                연습용 화면이에요. 여기 쓴 내용은 기관에 보내지 않고 서버에도 저장하지 않아요. 이 브라우저 탭에만 남고, 탭을 닫으면 지워져요.
               </Typography>
             </Stack>
           </Stack>
