@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Alert, Box, Button, CircularProgress, Stack, Typography } from '@mui/material'
+import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Stack, Typography } from '@mui/material'
 import { CheckCircleIcon, ShieldIcon } from '../components/icons.jsx'
 import PageHero from '../components/PageHero.jsx'
 import PriorInfoField from '../components/prior-info/PriorInfoField.jsx'
@@ -27,6 +27,8 @@ const errorText = (code) => ERROR_TEXT[code] ?? '문제가 생겼어요. 다시 
 // - 저장된 값은 입력 칸에 자동으로 채운다(R11 "다시 묻지 않는다"). 작성 건 모드에서 필요한 값이
 //   모두 저장돼 있으면 칸을 접고 바로 작성을 시작하게 한다(US-04).
 // - savedInfo 가 바뀌면(저장 후 다시 불러옴) App 에서 key 를 바꿔 이 화면을 새로 그린다.
+// - 사전 정보는 서버가 아니라 이 기기 브라우저에 저장된다(api/priorInfo.js). 관리 모드에서는 onClear 로 직접 지울 수 있다(공용 기기).
+// - backLabel: 돌아가기 버튼 글자 (주지 않으면 모드에 맞는 기본 글자)
 export default function PriorInfoPage({
   language = 'ko',
   savedInfo = {},
@@ -39,7 +41,11 @@ export default function PriorInfoPage({
   startingWriting = false,
   onRetry,
   onBack,
+  backLabel,
+  onClear,
 }) {
+  const [askClear, setAskClear] = useState(false)
+  const hasSaved = Object.values(savedInfo).some((v) => (v ?? '').trim())
   const draftMode = Array.isArray(requiredKeys)
   const keys = useMemo(
     () => (draftMode ? PRIOR_INFO_KEYS.filter((k) => requiredKeys.includes(k)) : PRIOR_INFO_KEYS),
@@ -149,10 +155,34 @@ export default function PriorInfoPage({
               onStartWriting={onStartWriting}
               startingWriting={startingWriting}
               onBack={onBack}
+              backLabel={backLabel}
+              onClear={!draftMode && onClear && hasSaved ? () => setAskClear(true) : undefined}
             />
           </Stack>
         )}
       </Container>
+
+      <Dialog open={askClear} onClose={() => setAskClear(false)} aria-labelledby="prior-clear-title">
+        <DialogTitle id="prior-clear-title">이 기기에 저장한 정보를 지울까요?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            이름·생년월일·연락처·주소가 이 브라우저에서 지워져요. 다른 사람과 함께 쓰는 기기라면 지워 두세요. 지우면 되돌릴 수 없어요.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setAskClear(false)}>그대로 둘게요</Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={() => {
+              setAskClear(false)
+              onClear()
+            }}
+          >
+            지우기
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   )
 }
@@ -186,7 +216,7 @@ function SavedSummary({ keys, savedInfo, onEdit }) {
 }
 
 // 오른쪽(모바일은 아래) 요약: 남은 칸 수 → 저장(또는 바로 작성 시작)
-function SummaryPanel({ draftMode, expanded, allSaved, total, invalidCount, changedCount, saving, canSubmit, onSubmit, onStartWriting, startingWriting, onBack }) {
+function SummaryPanel({ draftMode, expanded, allSaved, total, invalidCount, changedCount, saving, canSubmit, onSubmit, onStartWriting, startingWriting, onBack, backLabel, onClear }) {
   const skip = draftMode && allSaved && !expanded
   const done = total - invalidCount
 
@@ -251,13 +281,19 @@ function SummaryPanel({ draftMode, expanded, allSaved, total, invalidCount, chan
             <ShieldIcon size={18} />
           </Box>
           <Typography sx={{ fontSize: 13, color: ds.text2 }}>
-            사전 정보는 나만 보고 고칠 수 있고, AI에는 보내지 않아요.
+            사전 정보는 서버에 보내지 않고 이 기기 브라우저에만 저장해요. AI에도 보내지 않아요.
           </Typography>
         </Stack>
 
         {onBack && (
           <Button color="inherit" onClick={onBack}>
-            {draftMode ? '입력 항목 확인으로 돌아가기' : '돌아가기'}
+            {backLabel ?? (draftMode ? '입력 항목 확인으로 돌아가기' : '돌아가기')}
+          </Button>
+        )}
+
+        {onClear && (
+          <Button color="error" size="small" onClick={onClear} disabled={saving}>
+            이 기기에 저장한 정보 지우기
           </Button>
         )}
       </Stack>
