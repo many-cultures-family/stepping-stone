@@ -2,6 +2,7 @@
 // VITE_USE_MOCK=true + VITE_MOCK_LOGIN=true 면 가짜 세션(src/mocks/auth.js)을 쓴다. 기본은 항상 실서버.
 import { ApiError, MOCK_LOGIN, request } from './client.js'
 import * as mock from '../mocks/auth.js'
+import { clearAllDraftInputs } from '../utils/browserStore.js'
 
 export const GOOGLE_LOGIN_URL = '/api/auth/google/login'
 
@@ -49,7 +50,9 @@ export function updateLanguage(language) {
 }
 
 /** POST /api/auth/logout (LOGIN-API.md 항목 5) → 204 */
-export function logout() {
-  if (MOCK_LOGIN) return mock.logout()
-  return request('/auth/logout', { method: 'POST' })
+export async function logout() {
+  const res = MOCK_LOGIN ? await mock.logout() : await request('/auth/logout', { method: 'POST' })
+  // 같은 기기를 다른 사람이 쓸 수 있으니 브라우저에 남은 가상 작성 입력값을 지운다 (utils/browserStore.js)
+  clearAllDraftInputs()
+  return res
 }
