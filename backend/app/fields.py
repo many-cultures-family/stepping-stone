@@ -284,3 +284,18 @@ def confirm_fields(draft_id: int, user: Annotated[dict, Depends(auth.current_use
         conn.close()
 
     return {"draft": _draft_response(draft)}
+
+
+# F-03 입력 형식 목록. 사전 정보·입력값은 브라우저에만 두므로(사전 정보·입력값 서버 저장 여부 결정)
+# 브라우저가 형식 검사(R2)에 쓸 규칙을 서버의 단일 출처(input_format 테이블)에서 받아 간다.
+# 경로·응답 모양은 [제안] (FIELD-CHECK-API.md 19·116행 "GET /api/input-formats 같은 별도 목록 API")
+@router.get("/input-formats")
+def get_input_formats(user: Annotated[dict, Depends(auth.current_user)]):
+    conn = db.connect()
+    try:
+        rows = conn.execute(
+            "SELECT code, label, pattern, example FROM input_format ORDER BY rowid"
+        ).fetchall()
+    finally:
+        conn.close()
+    return {"formats": [dict(row) for row in rows]}
