@@ -9,7 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
-from app import auth, db, documents, drafts, fields, writing
+from app import auth, db, documents, drafts, fields, privacy_rules, writing
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,7 @@ app.include_router(drafts.router)
 app.include_router(documents.router)
 app.include_router(fields.router)
 app.include_router(writing.router)
+app.include_router(privacy_rules.router)
 
 
 @app.exception_handler(RequestValidationError)
