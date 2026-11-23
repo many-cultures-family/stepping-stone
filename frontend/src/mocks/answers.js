@@ -1,5 +1,5 @@
-// 서술형 답변 목 저장소. 답변 검토(mocks/review.js)와 개인정보 감지(mocks/privacy.js)가 같이 쓴다.
-// 개인정보 감지에서 '지울게요'를 고르면 답변이 바뀌므로, 두 목이 같은 답변을 봐야 한다.
+// 서술형 답변 목 저장소. 답변 검토(mocks/review.js)가 쓴다.
+// 개인정보 감지는 브라우저가 이 답변을 받아서 직접 한다 (utils/privacyDetect.js).
 // 시나리오 번호는 mocks/review.js 맨 위 주석을 본다. 실제 개인정보는 없다(모두 지어낸 값).
 
 const ANSWERS = {
@@ -53,13 +53,4 @@ export function getMockAnswers(draftId) {
   const id = Number(draftId)
   if (!store.has(id)) store.set(id, seed(id))
   return store.get(id).map((a) => ({ ...a }))
-}
-
-export function setMockAnswerValue(draftId, answerId, value) {
-  const id = Number(draftId)
-  if (!store.has(id)) store.set(id, seed(id))
-  store.set(
-    id,
-    store.get(id).map((a) => (a.id === answerId ? { ...a, value } : a)),
-  )
 }

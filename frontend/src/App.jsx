@@ -126,7 +126,7 @@ function PriorInfoRoute({ draftId, language }) {
   )
 }
 
-// F-06 서술형 답변 검토 + F-07 개인정보 감지. 데이터는 api/review.js·api/privacy.js(명세 전이라 [제안], 목 전용)를 거친다.
+// F-06 서술형 답변 검토 + F-07 개인정보 감지. 검토는 api/review.js(목 전용), 감지 규칙은 api/privacy.js(GET /api/privacy-rules)를 거친다.
 function AnswerReviewRoute({ draftId }) {
   const review = useAnswerReview(draftId)
   const { busy, error, run, clearError } = useSingleFlight()
@@ -142,7 +142,6 @@ function AnswerReviewRoute({ draftId }) {
         detections={review.detections}
         pendingDetections={review.pendingDetections}
         privacyError={review.privacyError}
-        privacySaving={review.privacySaving}
         onRequestReview={review.request}
         onConfirmPrivacy={review.confirmPrivacy}
         onCancelPrivacy={review.cancelPrivacy}
