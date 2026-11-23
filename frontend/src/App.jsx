@@ -16,6 +16,7 @@ import FieldCheckPage from './pages/FieldCheckPage.jsx'
 import LandingPage from './pages/LandingPage.jsx'
 import PriorInfoPage from './pages/PriorInfoPage.jsx'
 import UploadPage from './pages/UploadPage.jsx'
+import WritingPage from './pages/WritingPage.jsx'
 import { useAnswerReview } from './hooks/useAnswerReview.js'
 import { usePriorInfo } from './hooks/usePriorInfo.js'
 import { getPendingFile, matchRoute, navigate, usePath } from './router.js'
@@ -68,6 +69,13 @@ function AppContent() {
           onReupload={() => navigate('/upload')}
         />
       )}
+      {/* F-04 가상 작성 (VIRTUAL-FORM-API.md 항목 1). 원본 위에 입력칸을 겹쳐 그린다 */}
+      {route.name === 'writing' && status === 'authenticated' && <WritingPage key={route.params.draftId} draftId={route.params.draftId} />}
+      {route.name === 'writing' && status === 'anonymous' && (
+        <Container sx={{ py: 6 }}>
+          <LoginRequired />
+        </Container>
+      )}
       {/* F-03 API 명세가 아직 없어 저장된 사전 정보·저장 동작을 연결하지 않았다.
           명세가 나오면 여기서 savedInfo·status·serverErrors·onSave·onStartWriting 을 넘기고,
           작성 건 모드의 requiredKeys 는 이 작성 건 fields 의 prior_info_key 목록으로 바꾼다. */}
@@ -109,7 +117,7 @@ function PriorInfoRoute({ draftId, language }) {
         errorCode={errorCode}
         onSave={save}
         onRetry={retry}
-        onStartWriting={draftId ? () => run(() => startWriting(draftId).then(() => navigate('/drafts'))) : undefined}
+        onStartWriting={draftId ? () => run(() => startWriting(draftId).then(() => navigate(`/drafts/${draftId}/writing`))) : undefined}
         startingWriting={busy}
         onBack={() => navigate(draftId ? `/drafts/${draftId}/fields` : '/drafts')}
       />
