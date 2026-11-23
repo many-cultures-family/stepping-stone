@@ -118,21 +118,27 @@ function PriorInfoRoute({ draftId, language }) {
   )
 }
 
-// F-06 서술형 답변 검토. 데이터·검토 요청은 api/review.js(명세 전이라 [제안], 목 전용)를 거친다.
+// F-06 서술형 답변 검토 + F-07 개인정보 감지. 데이터는 api/review.js·api/privacy.js(명세 전이라 [제안], 목 전용)를 거친다.
 function AnswerReviewRoute({ draftId }) {
-  const { loaded, answers, suggestions, reviewStatus, errorCode, request, decide } = useAnswerReview(draftId)
+  const review = useAnswerReview(draftId)
   const { busy, error, run, clearError } = useSingleFlight()
-  if (!loaded) return <Loading />
+  if (!review.loaded) return <Loading />
   return (
     <>
       <ActionError error={error} onClose={clearError} />
       <AnswerReviewPage
-        answers={answers}
-        suggestions={suggestions}
-        reviewStatus={reviewStatus}
-        errorCode={errorCode}
-        onRequestReview={request}
-        onDecide={decide}
+        answers={review.answers}
+        suggestions={review.suggestions}
+        reviewStatus={review.reviewStatus}
+        errorCode={review.errorCode}
+        detections={review.detections}
+        pendingDetections={review.pendingDetections}
+        privacyError={review.privacyError}
+        privacySaving={review.privacySaving}
+        onRequestReview={review.request}
+        onConfirmPrivacy={review.confirmPrivacy}
+        onCancelPrivacy={review.cancelPrivacy}
+        onDecide={review.decide}
         // 요청 중에는 undefined 를 넘겨 '검토 마치기' 버튼을 끈다(AnswerReviewPage 의 canFinish)
         onFinish={busy ? undefined : () => run(() => finishReview(draftId).then(() => navigate('/drafts')))}
         onBack={() => navigate('/drafts')}
