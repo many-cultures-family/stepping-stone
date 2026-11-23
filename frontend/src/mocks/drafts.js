@@ -76,7 +76,12 @@ export function addDraft(patch = {}) {
   return d
 }
 
-/** 다른 목이 단계·상태를 바꿨을 때 목록에도 반영한다 (항목 확정, 사전 정보 저장, 검토 마치기) */
+/** 작성 건 하나 (없으면 undefined). mocks/documents.js 인식 목이 단계·상태를 확인할 때 쓴다 */
+export function findDraft(draftId) {
+  return drafts.find((x) => x.id === Number(draftId))
+}
+
+/** 다른 목이 단계·상태를 바꿨을 때 목록에도 반영한다 (글자 인식, 항목 확정, 사전 정보 저장, 검토 마치기) */
 export function updateDraft(draftId, patch) {
   const d = drafts.find((x) => x.id === Number(draftId))
   if (d) Object.assign(d, patch)
