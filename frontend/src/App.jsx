@@ -6,6 +6,7 @@ import { startWriting } from './api/priorInfo.js'
 import { AuthProvider } from './auth/AuthContext.jsx'
 import { LOGIN_ERROR_MESSAGES } from './auth/loginErrors.js'
 import { useAuth } from './auth/useAuth.js'
+import { ExplainProvider } from './explain/ExplainProvider.jsx'
 import Layout from './components/Layout.jsx'
 import LoginRequired from './components/LoginRequired.jsx'
 import { Container } from './components/ui.jsx'
@@ -208,7 +209,10 @@ function Loading() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      {/* F-05 단어·문장 설명: 로그인한 사용자의 언어로 용어 사전을 불러와 화면 전체에서 같이 쓴다 */}
+      <ExplainProvider>
+        <AppContent />
+      </ExplainProvider>
     </AuthProvider>
   )
 }

@@ -1,5 +1,6 @@
 import { Box, Button, Stack, Typography } from '@mui/material'
 import { ds, radius, squircle } from '../../theme.js'
+import ExplainableText from '../explain/ExplainableText.jsx'
 import { CheckCircleIcon } from '../icons.jsx'
 import { Pill } from '../ui.jsx'
 import SuggestionCard from './SuggestionCard.jsx'
@@ -27,7 +28,8 @@ export default function AnswerReviewCard({ answer, suggestions, reviewed, onDeci
     >
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
         <Typography id={`answer-${answer.id}`} variant="h3" component="h2" sx={{ fontSize: { xs: 20, md: 24 }, flexGrow: 1, wordBreak: 'keep-all' }}>
-          {answer.label}
+          {/* 칸 제목·안내 문구는 문서 속 글자라 설명(F-05)을 붙인다. 내가 쓴 답변에는 붙이지 않는다 (L2에 보내면 안 됨) */}
+          <ExplainableText text={answer.label} />
         </Typography>
         {reviewed && (pendingCount > 0
           ? <Pill tone="soft" size="sm">고를 제안 {pendingCount}개</Pill>
@@ -39,7 +41,9 @@ export default function AnswerReviewCard({ answer, suggestions, reviewed, onDeci
             </Pill>
           ))}
       </Stack>
-      {answer.guide && <Typography sx={{ color: ds.text2, mt: 1, wordBreak: 'keep-all' }}>{answer.guide}</Typography>}
+      {answer.guide && (
+        <ExplainableText text={answer.guide} component="p" sentenceButton sx={{ color: ds.text2, mt: 1, wordBreak: 'keep-all' }} />
+      )}
 
       {/* 내가 쓴 답변 (자동으로 바뀌지 않는다, R6) */}
       <Box sx={{ mt: 2.5, p: 2, ...squircle(radius.tile), bgcolor: ds.white, border: `1px solid ${empty ? ds.red : ds.line}` }}>
