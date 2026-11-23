@@ -41,6 +41,8 @@ RESPONSE_SCHEMA = {
                 "nullable": True,
             },
             "description": {"type": "STRING"},
+            # choice의 보기. 스키마에 없으면 Gemini가 아예 돌려주지 않아 선택형 보기가 늘 비었다
+            "options": {"type": "ARRAY", "items": {"type": "STRING"}, "nullable": True},
             "bbox": {
                 "type": "OBJECT",
                 "properties": {
@@ -86,12 +88,26 @@ def infer_fields(masked_text, language, existing_fields=None, flagged_field_ids=
         raise LLMCallError("L1 응답이 배열이 아님")
     for item in fields:
         _validate_field_shape(item)
+        _fill_consent_options(item)
     if flagged_field_ids and len(fields) != len(existing_fields or []):
         raise LLMCallError(
             f"재분석 응답 개수({len(fields)})가 기존 항목 개수"
             f"({len(existing_fields or [])})와 다름 — 항목이 사라졌을 수 있다"
         )
     return fields
+
+
+CONSENT_OPTIONS = ["동의합니다", "동의하지 않습니다"]
+
+
+def _fill_consent_options(item):
+    """보기 없는 동의 여부 choice에 기본 보기를 넣는다. 동의는 예/아니오 둘 중 하나로 받아야 한다."""
+    if (
+        item.get("format_code") == "choice"
+        and not item.get("options")
+        and "동의" in (item.get("label") or "")
+    ):
+        item["options"] = list(CONSENT_OPTIONS)
 
 
 def _validate_field_shape(item):
@@ -120,6 +136,7 @@ def _build_prompt(masked_text, language, existing_fields, flagged_field_ids):
         "format_code(phone/date/email/number/name/address/short_text/long_text/choice/signature 중 하나), "
         "required(참거짓), prior_info_key(name/birth_date/phone/address 중 연결되는 것, 없으면 null), "
         f"description({language} 언어로 쓴 사용자용 설명), "
+        "options(choice일 때 보기 글자 배열, 문서에 적힌 그대로·순서대로. choice가 아니면 null), "
         'bbox({"page":1,"x":0~1,"y":0~1,"w":0~1,"h":0~1}).'
     )
     parts = [
@@ -142,8 +159,20 @@ def _build_prompt(masked_text, language, existing_fields, flagged_field_ids):
             "label은 앞뒤 문맥으로 정하고(예: 신청일, 작성일), 문맥이 없으면 '작성일'로 한다. "
             "'(인)', '(서명 또는 인)', '서명', '날인'이 있는 자리는 format_code를 signature로 하는 항목이다. "
             "label은 같은 줄의 사람 이름 칸을 붙여 정한다(예: 신청인 서명, 보호자 서명). "
+            "'작성자 성명: ____ (인)'처럼 이름을 쓰는 빈칸과 서명 표시가 한 줄에 있으면 "
+            "이름 칸(format_code name, label 예: 작성자 성명)과 서명 칸(signature, label 예: 작성자 서명) 두 항목으로 나누고, "
+            "둘 다 그 줄의 위치 데이터를 bbox로 쓴다. "
             "signature 항목의 description에는 이 칸은 사용자가 실제 서류에 직접 서명하거나 도장을 찍는 칸이라고 쓴다. "
             "bbox는 그 줄의 위치 데이터에서 고른다."
+        ),
+        # 동의 여부 줄. □가 OCR에서 '다'·'n'·'더' 같은 글자로 읽히고, 보기 없이 choice만 오면
+        # 화면이 고를 것을 못 보여 준다 (2026-11-23 실측: 동의서 3칸 모두 options 없음)
+        (
+            "체크 상자(□)는 OCR에서 '다', 'n', '더', 'ㅁ', '口', 'O' 같은 글자로 잘못 읽힐 수 있다. "
+            "'동의합니다 □ 동의하지 않습니다 □'처럼 보기 뒤나 앞에 상자가 있는 줄은 하나의 choice 항목이다. "
+            'options에는 상자 글자를 뺀 보기만 줄에 나온 순서대로 넣는다(예: ["동의합니다", "동의하지 않습니다"]). '
+            "label은 그 줄 위의 제목으로 정한다(예: 개인정보 수집·이용 동의). "
+            "예/아니오, 있음/없음, 남/여처럼 보기를 고르는 줄도 같다. 동의 여부 항목은 required를 true로 한다."
         ),
         f"사용 언어 코드: {language}",
         f"문서 텍스트:\n{masked_text}",
