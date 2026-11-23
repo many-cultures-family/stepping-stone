@@ -3,8 +3,12 @@
 // LLM(Gemini) 호출은 프론트에서 하지 않는다. 항상 FastAPI를 거친다.
 
 // true 면 작성 목록·업로드·입력 항목·사전 정보·답변 검토를 src/mocks 의 목데이터로 처리한다.
-// 로그인(src/api/auth.js)은 목이 없고 항상 실서버(Google)를 쓴다.
+// 로그인(src/api/auth.js)은 기본으로 항상 실서버(Google)를 쓴다.
 export const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
+
+// true 면 로그인도 가짜 세션(src/mocks/auth.js)을 쓴다. Google·백엔드 없이 로그인이 필요한 화면을 볼 때만 켠다.
+// 목 데이터가 아닌 실서버 API 는 가짜 세션을 모르므로 USE_MOCK 일 때만 켜진다.
+export const MOCK_LOGIN = USE_MOCK && import.meta.env.VITE_MOCK_LOGIN === 'true'
 
 /** 서버 오류. code 는 docs/API.md 오류 코드 (예: FILE_TYPE_NOT_ALLOWED), 연결 실패는 NETWORK_ERROR */
 export class ApiError extends Error {
