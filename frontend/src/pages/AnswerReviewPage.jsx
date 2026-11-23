@@ -23,7 +23,7 @@ const errorText = (code) => ERROR_TEXT[code] ?? '문제가 생겼어요. 다시 
 
 // F-06 서술형 답변 검토 (US-05)
 // - 데이터와 동작은 props 로 받는다. App.jsx 의 AnswerReviewRoute 가 hooks/useAnswerReview.js → api/review.js 로 연결한다.
-//   F-06 API 명세가 아직 없어서 api/review.js 의 경로·응답은 [제안]이고, VITE_USE_MOCK=true 에서는 mocks/review.js 가 응답한다.
+//   F-06 API 명세가 아직 없어서 api/review.js 의 경로·응답은 [제안]이다.
 // - PageHero 의 단계 표시는 step={null} 로 숨긴다. Stepper 는 3단계(서류 올리기·입력 항목 확인·사전 정보 입력)뿐이라
 //   4번째를 가리킬 수 없고, 전체 단계 구성이 정해질 때까지 '○단계' 문구도 쓰지 않는다.
 // - 데이터 모양은 DATA-MODEL.md 를 따른다.

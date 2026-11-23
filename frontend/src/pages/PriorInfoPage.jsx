@@ -16,8 +16,7 @@ const ERROR_TEXT = {
 const errorText = (code) => ERROR_TEXT[code] ?? '문제가 생겼어요. 다시 시도해 주세요.'
 
 // F-03 사전 정보 입력·관리 (US-04)
-// - 화면만 구현했다. F-03 API 명세가 아직 없어서 API 클라이언트·목데이터는 만들지 않았고,
-//   데이터와 동작은 모두 props 로 받는다. 명세가 나오면 App 에서 api 모듈을 연결한다.
+// - 데이터와 동작은 모두 props 로 받는다. App 이 api/priorInfo.js(브라우저 보관)를 연결한다.
 // - 데이터 모양은 DATA-MODEL.md prior_info 를 따른다.
 //   savedInfo:    { [info_key]: value }  이 사용자가 이미 저장한 사전 정보
 //   requiredKeys: 이 작성 건 입력 항목에 연결된 prior_info_key 목록. 주면 '작성 건 모드'(흐름 ③),

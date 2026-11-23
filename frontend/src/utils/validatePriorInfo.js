@@ -4,7 +4,7 @@
 
 // 형식 규칙은 서버 input_format 한 벌을 쓴다 (GET /api/input-formats, api/fields.js getInputFormats).
 // 사전 정보 종류 → 칸 형식 코드는 백엔드 llm.PRIOR_INFO_FORMATS(#50)와 같다.
-// 목록을 못 받았을 때(목 모드·네트워크 오류)만 아래 기본 규칙으로 대신 검사한다 (서버 시드와 같은 값).
+// 목록을 못 받았을 때(네트워크 오류 등)만 아래 기본 규칙으로 대신 검사한다 (서버 시드와 같은 값).
 // "실제 있는 날짜인가"·"미래가 아닌가" 같은 달력 검사는 서버 규칙에 없어서 화면에서 하지 않는다.
 export const PRIOR_INFO_FORMATS = { name: 'name', birth_date: 'date', phone: 'phone', address: 'address' }
 

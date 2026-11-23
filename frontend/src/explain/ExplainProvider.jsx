@@ -19,7 +19,7 @@ export function ExplainProvider({ children }) {
   useEffect(() => {
     if (status !== 'authenticated') return undefined
     let ignore = false
-    getGlossary(language).then(
+    getGlossary().then(
       (data) => {
         if (!ignore) setGlossary({ language: data.language, terms: data.terms ?? [] })
       },
@@ -56,7 +56,7 @@ export function ExplainProvider({ children }) {
     async (text, termId) => {
       const key = `${language}|${text}`
       if (cache.has(key)) return cache.get(key)
-      const data = await requestEasyExplanation(text, termId, language)
+      const data = await requestEasyExplanation(text, termId)
       cache.set(key, data)
       return data
     },
