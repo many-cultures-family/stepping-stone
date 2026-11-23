@@ -7,32 +7,14 @@
 //   4 : 답변이 비어 있는 칸이 있어 검토를 요청할 수 없다
 //   5 : 서술형 칸이 없다 (빈 화면)
 //   6 : 서버 연결 실패 (NETWORK_ERROR)
+//   7 : 개인정보가 섞인 답변 (F-07). 검토 요청 전에 개인정보 결정 모달이 뜬다 → 결정 뒤 제안 2개
+// 답변 데이터는 mocks/answers.js 에 있다 (개인정보 감지 목과 같이 쓴다).
 import { ApiError } from '../api/client.js'
+import { ANSWER_SCENARIOS, getMockAnswers } from './answers.js'
+import { undecidedCount } from './privacy.js'
 import { updateDraft } from './drafts.js'
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-
-const ANSWERS = {
-  default: [
-    {
-      id: 101,
-      label: '신청 사유',
-      guide: '왜 이 서비스를 신청하는지 두세 문장으로 써 주세요.',
-      value: '저는 한국에 산지 2년 되었습니다. 아이 학교 서류를 혼자 쓰기 어려워서 신청하고 싶습니다 .',
-    },
-    {
-      id: 102,
-      label: '추가로 전달할 내용',
-      guide: '담당자에게 알리고 싶은 내용이 있으면 써 주세요.',
-      value: '평일 오후에는 일을 해서 전화를 받기 어렵습니다.',
-    },
-  ],
-  3: [{ id: 301, label: '신청 사유', guide: '왜 신청하는지 써 주세요.', value: '아이 학교 서류를 쓰는 데 도움이 필요합니다.' }],
-  4: [
-    { id: 401, label: '신청 사유', guide: '왜 신청하는지 써 주세요.', value: '아이 학교 서류를 쓰는 데 도움이 필요합니다.' },
-    { id: 402, label: '추가로 전달할 내용', guide: '담당자에게 알리고 싶은 내용이 있으면 써 주세요.', value: '' },
-  ],
-}
 
 // kind: 맞춤법 · 문법 · 질문 의도 · 보충 (DATA-MODEL.md review_suggestion.kind)
 const SUGGESTIONS = {
@@ -43,10 +25,15 @@ const SUGGESTIONS = {
     { id: 4, field_answer_id: 102, kind: '보충', suggested_text: '평일 오후에는 일을 해서 전화를 받기 어렵습니다. 문자로 연락해 주시면 감사하겠습니다.', explanation: '연락받을 방법을 함께 쓰면 담당자가 바로 연락할 수 있어요.', decision: '미결정' },
   ],
   3: [],
+  // 개인정보 결정을 마친 뒤의 제안. 가린 부분은 L3가 보지 못하므로 제안에도 나오지 않는다
+  7: [
+    { id: 71, field_answer_id: 701, kind: '질문 의도', suggested_text: null, explanation: "질문은 '왜 신청하는지'를 물어요. 등록 번호보다 아이에게 왜 이 수업이 필요한지를 쓰면 좋아요.", decision: '미결정' },
+    { id: 72, field_answer_id: 702, kind: '문법', suggested_text: '낮에는 일을 해서 전화를 받기 어렵습니다.', explanation: "'낮에는'과 '일을 해서'가 자연스럽게 이어져요. 이 문장은 이대로도 괜찮아요.", decision: '미결정' },
+  ],
 }
 
 function scenarioKey(draftId) {
-  return [3, 4].includes(Number(draftId)) ? Number(draftId) : 'default'
+  return ANSWER_SCENARIOS.includes(Number(draftId)) ? Number(draftId) : 'default'
 }
 
 let failedOnce = false
@@ -56,7 +43,7 @@ export async function getReview(draftId) {
   const id = Number(draftId)
   if (id === 6) throw new ApiError('서버 연결 실패', { code: 'NETWORK_ERROR' })
   if (id === 5) return { answers: [] }
-  return { answers: ANSWERS[scenarioKey(id)] }
+  return { answers: getMockAnswers(id) }
 }
 
 export async function requestReview(draftId) {
@@ -67,6 +54,8 @@ export async function requestReview(draftId) {
     throw new ApiError('LLM_CALL_FAILED', { status: 502, code: 'LLM_CALL_FAILED' })
   }
   if (id === 6) throw new ApiError('서버 연결 실패', { code: 'NETWORK_ERROR' })
+  // R7: 감지된 개인정보를 사용자가 모두 정하기 전에는 답변을 L3에 보내지 않는다. 서버도 이렇게 막아야 한다 [제안]
+  if (undecidedCount(id) > 0) throw new ApiError('PRIVACY_UNDECIDED', { status: 409, code: 'PRIVACY_UNDECIDED' })
   const rows = SUGGESTIONS[scenarioKey(id)] ?? []
   return { suggestions: rows.map((s) => ({ ...s, decision: '미결정' })) }
 }
