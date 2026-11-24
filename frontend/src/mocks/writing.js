@@ -100,3 +100,40 @@ export async function startWriting(draftId) {
   updateDraft(draftId, { step: 'writing' })
   return { draft: { id: Number(draftId), status: '수정', step: 'writing' } }
 }
+
+// 서버 규칙(backend/app/prior_info_rules.py RULES)과 같은 모양. 목 모드에서만 쓴다
+const TEXT_STEPS = [{ op: 'nfc' }, { op: 'remove', pattern: '[\\s\\-\u2010-\u2015]' }, { op: 'lowercase' }]
+export async function getPriorInfoRules() {
+  return {
+    empty: 'not_mismatch',
+    keys: [
+      { key: 'name', format_code: 'name', steps: TEXT_STEPS },
+      {
+        key: 'birth_date',
+        format_code: 'date',
+        steps: [
+          {
+            op: 'date',
+            patterns: [
+              { regex: '^([0-9]{4})\\s*[.\\-/년]\\s*([0-9]{1,2})\\s*[.\\-/월]\\s*([0-9]{1,2})\\s*[.일]?$', groups: ['year', 'month', 'day'] },
+              { remove: '[\\s.\\-/]', regex: '^([0-9]{4})([0-9]{2})([0-9]{2})$', groups: ['year', 'month', 'day'] },
+              { remove: '[\\s.\\-/]', regex: '^([0-9]{2})([0-9]{2})([0-9]{2})$', groups: ['yy', 'month', 'day'] },
+            ],
+            two_digit_year: '1900s_if_greater_than_this_year',
+          },
+        ],
+        unreadable_input: 'not_mismatch',
+        unreadable_saved_steps: TEXT_STEPS,
+      },
+      {
+        key: 'phone',
+        format_code: 'phone',
+        steps: [
+          { op: 'remove', pattern: '[^0-9]' },
+          { op: 'replace_prefix', from: '82', to: '0', min_length: 11 },
+        ],
+      },
+      { key: 'address', format_code: 'address', steps: [...TEXT_STEPS, { op: 'remove', pattern: '[,()（）\\[\\]]' }] },
+    ],
+  }
+}

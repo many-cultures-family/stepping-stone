@@ -21,5 +21,15 @@ export function startWriting(draftId) {
   return request(`/drafts/${draftId}/writing:start`, { method: 'POST' })
 }
 
+/**
+ * 사전 정보 불일치 판정 규칙 (`GET /api/prior-info-rules`, 경로·모양 [제안], 백엔드 PR #51).
+ * 판정은 브라우저가 하고(utils/priorMismatch.js), 표기를 맞추는 규칙만 서버 한 곳에서 받는다.
+ * → { empty, keys: [{ key, format_code, steps, unreadable_input?, unreadable_saved_steps? }] }
+ */
+export function getPriorInfoRules() {
+  if (USE_MOCK) return mock.getPriorInfoRules()
+  return request('/prior-info-rules')
+}
+
 // 원본 한 페이지 이미지 주소는 F-02 미리보기도 같이 쓰므로 documents.js 에 둔다
 export { pageImageUrl } from './documents.js'

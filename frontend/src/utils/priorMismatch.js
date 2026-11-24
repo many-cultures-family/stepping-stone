@@ -1,69 +1,77 @@
 // 가상 작성(F-04) 불일치 판정: 사전 정보 값(prior) vs 지금 쓴 값. 서버는 판정하지 않는다
 // (VIRTUAL-FORM-API.md 공통 규칙, no-server-storage-user-input.md: 입력값·사전 정보는 브라우저에만 있다).
-// 짝은 form 응답 칸의 prior_info_key 로 짓는다 (prior_info.info_key: name · birth_date · phone · address).
+// 짝은 form 응답 칸의 prior_info_key 로 짓는다 (name · birth_date · phone · address).
 //
-// 같은 값을 다르게 적은 것까지 '다르다'고 하면 경고가 너무 잦다. 그래서 비교 전에 표기를 맞춘다.
-// 맞추는 규칙은 L3 개인정보 가림 매칭 규칙(docs/privacy/l3-masking.md [제안])과 같은 기준을 쓴다:
-//   - 공통: 앞뒤·사이 공백, 하이픈 무시, 영문 대소문자 무시
-//   - 전화번호: 숫자만 (+82 10… 은 010… 으로)
-//   - 날짜: 1990.01.01 · 1990-1-1 · 19900101 · 900101 · 1990년 1월 1일 을 모두 같은 날로
-//   - 주소: 쉼표·괄호 무시
+// 같은 값을 다르게 적은 것(010-0000-1234 / 01000001234, 1990.01.01 / 19900101)까지 '다르다'고 하지 않도록
+// 비교 전에 표기를 맞춘다. 맞추는 규칙은 화면에 적지 않고 서버가 내려 주는 규칙 한 벌을 그대로 따른다
+// (GET /api/prior-info-rules, backend/app/prior_info_rules.py). 이 파일은 그 규칙 데이터를 해석만 한다.
+//
+// 규칙 모양: { empty: 'not_mismatch', keys: [{ key, format_code, steps, unreadable_input?, unreadable_saved_steps? }] }
+// steps 의 op: nfc · remove(pattern) · lowercase · replace_prefix(from, to, min_length) · date(patterns, two_digit_year)
 
-/** 칸이 어떤 종류 값인지. 사전 정보 키가 먼저, 없으면 형식 코드 */
-function kindOf(field) {
-  const key = field?.prior_info_key
-  if (key === 'phone' || key === 'name' || key === 'address') return key
-  if (key === 'birth_date') return 'date'
-  return field?.format_code ?? 'text'
+/** 규칙의 정규식 문자열 → RegExp. 서버가 JavaScript(u 플래그)에서도 그대로 만들어지게 적어 준다 */
+const regexCache = new Map()
+function re(pattern, flags) {
+  const k = `${flags}/${pattern}`
+  if (!regexCache.has(k)) regexCache.set(k, new RegExp(pattern, flags))
+  return regexCache.get(k)
 }
 
-const basic = (v) =>
-  String(v ?? '')
-    .normalize('NFC')
-    .replace(/[\s\-‐-―]/g, '')
-    .toLowerCase()
-
-function normalizePhone(v) {
-  let d = String(v ?? '').replace(/\D/g, '')
-  if (d.startsWith('82') && d.length >= 11) d = `0${d.slice(2)}`
-  return d
-}
-
-/** 날짜를 YYYYMMDD 로. 읽지 못하면 null */
-export function normalizeDate(v) {
-  const s = String(v ?? '').trim()
-  if (!s) return null
-  const pad = (n) => String(Number(n)).padStart(2, '0')
-  const valid = (y, m, d) => Number(m) >= 1 && Number(m) <= 12 && Number(d) >= 1 && Number(d) <= 31
-  // 1990.01.01 · 1990-1-1 · 1990/1/1 · 1990년 1월 1일 · 1990. 1. 1.
-  let m = s.match(/^(\d{4})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})\s*[.일]?$/)
-  if (m && valid(m[1], m[2], m[3])) return `${m[1]}${pad(m[2])}${pad(m[3])}`
-  const digits = s.replace(/\D/g, '')
-  if (/^\d+$/.test(s.replace(/[\s.\-/]/g, ''))) {
-    // 19900101
-    if (digits.length === 8 && valid(0, digits.slice(4, 6), digits.slice(6))) return digits
-    // 900101 → 1990, 250101 → 2025 (올해 두 자리 연도보다 크면 1900년대)
-    if (digits.length === 6 && valid(0, digits.slice(2, 4), digits.slice(4))) {
-      const yy = Number(digits.slice(0, 2))
-      const century = yy > new Date().getFullYear() % 100 ? '19' : '20'
-      return `${century}${digits}`
+/** 날짜 step: 패턴을 차례로 맞춰 YYYYMMDD 로. 읽지 못하면 null */
+function parseDate(step, value) {
+  for (const p of step.patterns ?? []) {
+    const text = p.remove ? value.replace(re(p.remove, 'gu'), '') : value
+    const m = text.match(re(p.regex, 'u'))
+    if (!m) continue
+    const parts = Object.fromEntries((p.groups ?? []).map((g, i) => [g, m[i + 1]]))
+    const month = Number(parts.month)
+    const day = Number(parts.day)
+    if (!(month >= 1 && month <= 12 && day >= 1 && day <= 31)) continue
+    let year = parts.year
+    if (parts.yy != null) {
+      // two_digit_year '1900s_if_greater_than_this_year': 올해 두 자리보다 크면 1900년대 (900101 → 1990)
+      const century = Number(parts.yy) > new Date().getFullYear() % 100 ? '19' : '20'
+      year = `${century}${parts.yy}`
     }
+    return `${year}${String(month).padStart(2, '0')}${String(day).padStart(2, '0')}`
   }
   return null
 }
 
-/** 비교용으로 표기를 맞춘 값 */
-export function normalizeFor(field, value) {
-  switch (kindOf(field)) {
-    case 'phone':
-      return normalizePhone(value)
-    case 'date':
-      return normalizeDate(value) ?? basic(value)
-    case 'address':
-      return basic(value).replace(/[,()（）[\]]/g, '')
-    default:
-      return basic(value)
+/** steps 를 순서대로 적용. date 가 읽히지 않으면 null */
+function apply(steps, value) {
+  let text = value
+  for (const step of steps ?? []) {
+    switch (step.op) {
+      case 'nfc':
+        text = text.normalize('NFC')
+        break
+      case 'remove':
+        text = text.replace(re(step.pattern, 'gu'), '')
+        break
+      case 'lowercase':
+        text = text.toLowerCase()
+        break
+      case 'replace_prefix':
+        if (text.startsWith(step.from) && text.length >= step.min_length) text = step.to + text.slice(step.from.length)
+        break
+      case 'date':
+        text = parseDate(step, text.trim())
+        if (text === null) return null
+        break
+      default:
+        // 모르는 규칙이 오면 비교를 믿을 수 없다 → 이 칸은 판정하지 않는다
+        throw new Error(`모르는 규칙: ${step.op}`)
+    }
   }
+  return text
+}
+
+/** 이 칸에 해당하는 규칙 (없으면 null) */
+function ruleFor(field, rules) {
+  const key = field?.prior_info_key
+  if (!key || !rules?.keys) return null
+  return rules.keys.find((r) => r.key === key) ?? null
 }
 
 /** 이 칸이 사전 정보와 짝지어져 있고, 저장된 사전 정보 값이 있는지 */
@@ -75,15 +83,24 @@ export function priorValueFor(field, prior) {
 }
 
 /**
- * 불일치인지. 사전 정보 값과 지금 쓴 값이 둘 다 있고, 표기를 맞춰도 다를 때만 true.
- * 비어 있는 칸은 불일치가 아니다(빈칸은 '필수 빈칸'으로 따로 센다).
+ * 불일치인지. 사전 정보 값과 지금 쓴 값이 둘 다 있고, 서버 규칙으로 표기를 맞춰도 다를 때만 true.
+ * - 비어 있는 칸은 불일치가 아니다(빈칸은 '필수 빈칸'으로 따로 센다, rules.empty = 'not_mismatch')
+ * - 규칙을 못 받았거나 이 칸의 규칙이 없으면 false: 잘못된 '다름' 경고보다 경고 없음이 낫다
  */
-export function isMismatch(field, value, prior) {
+export function isMismatch(field, value, prior, rules) {
+  const rule = ruleFor(field, rules)
+  if (!rule) return false
   const saved = priorValueFor(field, prior)
   const current = String(value ?? '').trim()
   if (!saved || !current) return false
-  // 날짜를 아직 다 쓰지 않았거나(년·월·일 칸을 옮겨 가며 쓰는 중) 날짜로 읽히지 않으면 불일치가 아니라 형식 문제다.
-  // 형식 검사(writingLayout formatError)가 따로 알려 주므로 여기서는 비교하지 않는다
-  if (kindOf(field) === 'date' && normalizeDate(current) === null) return false
-  return normalizeFor(field, saved) !== normalizeFor(field, current)
+  try {
+    const currentNorm = apply(rule.steps, current)
+    // 지금 쓴 날짜가 날짜로 읽히지 않으면(쓰는 중이거나 형식 오류) 형식 검사가 먼저 알리므로 비교하지 않는다
+    if (currentNorm === null) return false
+    let savedNorm = apply(rule.steps, saved)
+    if (savedNorm === null) savedNorm = apply(rule.unreadable_saved_steps ?? [], saved)
+    return savedNorm !== currentNorm
+  } catch {
+    return false
+  }
 }

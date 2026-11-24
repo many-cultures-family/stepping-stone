@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Box, Button, CircularProgress, Stack, Typography } from '@mui/material'
 import { USE_MOCK } from '../api/client.js'
 import { getPriorInfo } from '../api/priorInfo.js'
-import { getForm, pageImageUrl } from '../api/writing.js'
+import { getForm, getPriorInfoRules, pageImageUrl } from '../api/writing.js'
 import { useAuth } from '../auth/useAuth.js'
 import ExplainableText from '../components/explain/ExplainableText.jsx'
 import { AlertCircleIcon, CheckCircleIcon, PenIcon, ShieldIcon } from '../components/icons.jsx'
@@ -22,7 +22,7 @@ import { fontFor, formatError, inputRect, isInput, joinDate, splitDate } from '.
 // - 서명(signature) 칸은 입력받지 않고 '직접 서명' 자리만 표시한다 (R10)
 // - 실제 기관에 보내지 않는 연습 화면임을 알린다 (R4)
 // - 불일치: 사전 정보와 짝지어진 칸(prior_info_key)에 저장된 값과 다르게 쓰면 주황으로 알린다. 판정은 브라우저가 한다
-//   (VIRTUAL-FORM-API.md, utils/priorMismatch.js). 이사 전 주소처럼 일부러 다르게 쓴 칸은 '그대로 둘게요'로 확인만 남긴다
+//   (VIRTUAL-FORM-API.md, utils/priorMismatch.js, 표기 맞춤 규칙은 GET /api/prior-info-rules). 이사 전 주소처럼 일부러 다르게 쓴 칸은 '그대로 둘게요'로 확인만 남긴다
 //   (R3 예외). 확인은 그 값에만 붙어서, 값을 다시 고치면 다시 판정한다. 확인 기록도 이 화면 메모리에만 둔다
 
 // API 오류 코드 → 문구
@@ -43,6 +43,7 @@ export default function WritingPage({ draftId }) {
   const [focusedId, setFocusedId] = useState(null)
   const [showMissing, setShowMissing] = useState(false)
   const [prior, setPrior] = useState({})
+  const [priorRules, setPriorRules] = useState(null)
   // '그대로 둘게요'로 확인한 칸: { [field_id]: 확인할 때의 값 }. 값이 바뀌면 확인이 풀린다
   const [acks, setAcks] = useState({})
   const inputRefs = useRef({})
@@ -52,13 +53,18 @@ export default function WritingPage({ draftId }) {
     getForm(draftId)
       .then(async (form) => {
         // 사전 정보가 브라우저에 있으면 연결된 칸에 미리 채운다 (실서버 모드는 사전 정보 화면이 아직 없어 비어 있음)
-        const prior = await getPriorInfo().catch(() => ({}))
+        // 불일치 규칙을 못 받으면 불일치 표시만 끄고(null) 작성은 그대로 한다
+        const [prior, rules] = await Promise.all([
+          getPriorInfo().catch(() => ({})),
+          getPriorInfoRules().catch(() => null),
+        ])
         if (cancelled) return
         const initial = {}
         for (const f of form.fields) {
           if (f.prior_info_key && prior[f.prior_info_key]) initial[f.field_id] = prior[f.prior_info_key]
         }
         setPrior(prior ?? {})
+        setPriorRules(rules)
         setValues(initial)
         setState({ status: 'ready', error: null, form })
       })
@@ -90,7 +96,7 @@ export default function WritingPage({ draftId }) {
     inputFields.map((f) => {
       const v = values[f.field_id]
       // 형식이 틀린 값은 형식 오류로만 알린다 (더 급한 문제이고, 덜 쓴 값이 '다름'으로 보이지 않게)
-      if (errors[f.field_id] || !isMismatch(f, v, prior)) return [f.field_id, null]
+      if (errors[f.field_id] || !isMismatch(f, v, prior, priorRules)) return [f.field_id, null]
       return [f.field_id, f.field_id in acks && acks[f.field_id] === v ? 'acknowledged' : 'mismatch']
     }),
   )
