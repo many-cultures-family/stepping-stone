@@ -210,3 +210,23 @@ def test_us02_get_fields_without_login_is_401(anon_client, db, seed_user_id):
 
     assert res.status_code == 401
     assert res.json() == {"detail": {"code": "LOGIN_REQUIRED"}}
+
+
+# US-02 #1: 선택형 항목은 보기(options)도 확인할 수 있어야 한다. 선택형이 아니면 null
+def test_us02_get_fields_includes_options(client, db, seed_user_id):
+    draft_id = insert_draft(db, seed_user_id, "수정", "field_check")
+    insert_form_field(
+        db,
+        draft_id,
+        label="개인정보 수집 동의",
+        format_code="choice",
+        options=["동의합니다", "동의하지 않습니다"],
+    )
+    insert_form_field(db, draft_id, label="성명", format_code="name")
+
+    res = get_fields(client, draft_id)
+
+    assert res.status_code == 200
+    fields = res.json()["fields"]
+    assert fields[0]["options"] == ["동의합니다", "동의하지 않습니다"]
+    assert fields[1]["options"] is None
