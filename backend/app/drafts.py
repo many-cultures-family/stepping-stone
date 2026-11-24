@@ -6,7 +6,7 @@ import uuid
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pypdf import PdfReader
 from pypdf.errors import PyPdfError
 
@@ -244,3 +244,57 @@ def cancel_draft(draft_id: int, user: Annotated[dict, Depends(auth.current_user)
             logger.exception("취소된 작성 건(%s)의 업로드 파일 삭제 실패", draft_id)
 
     return {"id": draft_id, "status": "취소"}
+
+
+# 되돌릴 수 있는 곳. 이번에는 검토 → 작성 하나만 연다.
+# 작성 → 사전 정보, 성공(제출 전) → 작성은 R11 연결과 함께 정하므로 뺀다
+REVERT_TARGETS = {"writing"}
+
+
+async def _read_revert_target(request):
+    """본문 {"to": "..."}. JSON이 아니거나 to가 문자열이 아니면 400 INVALID_REVERT_REQUEST"""
+    try:
+        body = await request.json()
+    except ValueError:
+        body = None
+    to = body.get("to") if isinstance(body, dict) else None
+    if not isinstance(to, str):
+        raise HTTPException(status_code=400, detail={"code": "INVALID_REVERT_REQUEST"})
+    return to
+
+
+@router.post("/drafts/{draft_id}:revert")
+async def revert_draft(
+    draft_id: int,
+    request: Request,
+    user: Annotated[dict, Depends(auth.current_user)],
+):
+    to = await _read_revert_target(request)
+    conn = db.connect()
+    try:
+        draft = _load_owned_draft(conn, draft_id, user)
+        if to not in REVERT_TARGETS:
+            raise HTTPException(status_code=409, detail={"code": "REVERT_NOT_ALLOWED"})
+
+        # 동시 호출: 조건이 있는 UPDATE 하나로 확인과 반영을 한 번에 한다 (writing:start와 같은 방식).
+        # 서버는 입력값을 갖지 않으므로 단계만 바꾼다 (no-server-storage-user-input.md).
+        # 검토·재분석 횟수는 되돌리지 않는다. reviewed_at은 review:start가 다시 비우므로 두고 간다
+        with conn:
+            updated = conn.execute(
+                "UPDATE draft SET step = 'writing' "
+                "WHERE id = ? AND step = 'review' AND status = '수정'",
+                (draft_id,),
+            )
+            if updated.rowcount == 0:
+                raise HTTPException(
+                    status_code=409, detail={"code": "REVERT_NOT_ALLOWED"}
+                )
+    finally:
+        conn.close()
+
+    return {
+        "id": draft_id,
+        "status": "수정",
+        "step": "writing",
+        "next_action": next_action("수정", "writing", draft["submitted_at"]),
+    }
