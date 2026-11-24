@@ -1,6 +1,5 @@
 // 작성 목록·제출 완료·취소 API (F-08, US-06·US-07). 기준: docs/api/DRAFT-STATUS-API.md (경로·응답 모양 그대로, 모두 [제안]).
-import { request, USE_MOCK } from './client.js'
-import * as mock from '../mocks/drafts.js'
+import { request } from './client.js'
 
 /**
  * 작성 목록 GET /api/drafts (항목 1)
@@ -9,7 +8,6 @@ import * as mock from '../mocks/drafts.js'
  * next_action: UPLOAD · FIELD_CHECK · PRIOR_INFO · WRITING · REVIEW · REJECTED · SUBMIT · DONE
  */
 export function listDrafts(status) {
-  if (USE_MOCK) return mock.listDrafts(status)
   const query = status ? `?status=${encodeURIComponent(status)}` : ''
   return request(`/drafts${query}`)
 }
@@ -21,7 +19,6 @@ export function listDrafts(status) {
  * 실패: 401, 403, 404 DRAFT_NOT_FOUND, 409 DRAFT_NOT_READY / ALREADY_SUBMITTED
  */
 export function submitDraft(draftId) {
-  if (USE_MOCK) return mock.submitDraft(draftId)
   return request(`/drafts/${draftId}:submit`, { method: 'POST' })
 }
 
@@ -32,6 +29,5 @@ export function submitDraft(draftId) {
  * 실패: 401, 403, 404 DRAFT_NOT_FOUND, 409 ALREADY_CANCELED
  */
 export function cancelDraft(draftId) {
-  if (USE_MOCK) return mock.cancelDraft(draftId)
   return request(`/drafts/${draftId}:cancel`, { method: 'POST' })
 }

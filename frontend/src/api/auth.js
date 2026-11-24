@@ -1,7 +1,6 @@
 // 로그인 관련 API. docs/api/LOGIN-API.md 기준 (경로·응답 모양 그대로).
-// VITE_USE_MOCK=true + VITE_MOCK_LOGIN=true 면 가짜 세션(src/mocks/auth.js)을 쓴다. 기본은 항상 실서버.
-import { ApiError, MOCK_LOGIN, request } from './client.js'
-import * as mock from '../mocks/auth.js'
+import { ApiError, request } from './client.js'
+import { clearAllDraftInputs } from '../utils/browserStore.js'
 
 export const GOOGLE_LOGIN_URL = '/api/auth/google/login'
 
@@ -14,7 +13,6 @@ export const GOOGLE_LOGIN_URL = '/api/auth/google/login'
  * 실패: 500 LOGIN_NOT_CONFIGURED(서버에 구글 설정 없음), 연결 실패는 NETWORK_ERROR → ApiError
  */
 export async function startGoogleLogin() {
-  if (MOCK_LOGIN) return mock.startGoogleLogin()
   let res
   try {
     res = await fetch(GOOGLE_LOGIN_URL, { redirect: 'manual', credentials: 'same-origin' })
@@ -38,18 +36,18 @@ export async function startGoogleLogin() {
 
 /** GET /api/auth/me (LOGIN-API.md 항목 3) → { user: { email, language } }. 비로그인이면 401 LOGIN_REQUIRED */
 export function getMe() {
-  if (MOCK_LOGIN) return mock.getMe()
   return request('/auth/me')
 }
 
 /** PATCH /api/auth/me (LOGIN-API.md 항목 4) → { user }. 실패: 401 / 400 LANGUAGE_NOT_ALLOWED */
 export function updateLanguage(language) {
-  if (MOCK_LOGIN) return mock.updateLanguage(language)
   return request('/auth/me', { method: 'PATCH', body: { language } })
 }
 
 /** POST /api/auth/logout (LOGIN-API.md 항목 5) → 204 */
-export function logout() {
-  if (MOCK_LOGIN) return mock.logout()
-  return request('/auth/logout', { method: 'POST' })
+export async function logout() {
+  const res = await request('/auth/logout', { method: 'POST' })
+  // 같은 기기를 다른 사람이 쓸 수 있으니 브라우저에 남은 가상 작성 입력값을 지운다 (utils/browserStore.js)
+  clearAllDraftInputs()
+  return res
 }

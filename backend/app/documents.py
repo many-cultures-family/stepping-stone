@@ -1,14 +1,16 @@
-# F-01 문서 인식·개인정보 가림 (OCR-API.md 항목 1, US-01 인수 조건 2·3·4번). 로그인·소유자 확인 필요
+# F-01 문서 인식·개인정보 가림 (OCR-API.md 항목 1, US-01 인수 조건 2·3·4번), 반려 건 다시 올리기. 로그인·소유자 확인 필요
 #
 # 가리기 전 OCR 원문은 저장하지 않고 로그에도 남기지 않는다 (R8, DATA-MODEL.md 87행).
 # 이 함수 안에서만 다루고 mask_ocr_lines를 거친 텍스트만 저장한다. 이 API는 LLM을 부르지 않는다.
 import json
 import logging
+import uuid
+from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
-from app import auth, db, ocr, privacy
+from app import auth, db, drafts, ocr, privacy
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
@@ -133,4 +135,105 @@ def recognize_document(
     return {
         "draft": {"id": draft_id, "status": "수정", "step": "field_check"},
         "document": {"page_count": document["page_count"], "empty_pages": empty_pages},
+    }
+
+
+@router.post("/drafts/{draft_id}/document:reupload")
+async def reupload_document(
+    draft_id: int,
+    user: Annotated[dict, Depends(auth.current_user)],
+    file: Annotated[UploadFile | None, File()] = None,
+):
+    """반려된 작성 건에 파일만 다시 올린다 [제안 — 명세 없음].
+
+    OCR-API.md·DOC-UPLOAD-API.md "아직 없는 항목: 반려 뒤 다시 올리기"를 채운다.
+    - `03` 3-2 "반려 → 수정: 사용자 재업로드", DATA-MODEL.md `document.draft_id`
+      "재업로드하면 이전 파일과 그 문서로 만든 입력 항목을 지우고 새 문서로 바꾼다"
+    - 파일 검사는 업로드(`POST /api/drafts`)와 같다 (400 FILE_REQUIRED, 415 FILE_TYPE_NOT_ALLOWED)
+    - 성공하면 status 수정·step upload로 되돌린다. 화면은 이어서 document:recognize를 부른다
+    - 재분석·검토·풀이 횟수는 작성 건마다의 사용 한도라 되돌리지 않는다
+    """
+    if file is None:
+        raise HTTPException(status_code=400, detail={"code": "FILE_REQUIRED"})
+
+    # 파일을 읽기 전에 권한·상태부터 본다 (남의 작성 건이면 파일을 저장하지 않는다)
+    conn = db.connect()
+    try:
+        row = conn.execute(
+            "SELECT user_id, status FROM draft WHERE id = ?", (draft_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "DRAFT_NOT_FOUND"})
+    if row["user_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN_DRAFT"})
+    if row["status"] != "반려":
+        raise HTTPException(status_code=409, detail={"code": "DRAFT_NOT_REJECTED"})
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail={"code": "FILE_REQUIRED"})
+    mime_type, ext = drafts.detect_type(data)
+    page_count = drafts.count_pages(data, mime_type)
+
+    # 원래 파일 이름은 개인정보일 수 있어 저장 이름에 쓰지 않는다 (업로드와 같음)
+    upload_dir = drafts.get_upload_dir()
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    new_path = upload_dir / f"{uuid.uuid4().hex}{ext}"
+    new_path.write_bytes(data)
+
+    old_path = None
+    conn = db.connect()
+    try:
+        with conn:
+            # 파일을 받는 사이 취소·중복 요청이 있었을 수 있다. 조건 있는 UPDATE로 확인과 반영을 한 번에 한다
+            updated = conn.execute(
+                "UPDATE draft SET status = '수정', step = 'upload', reject_reason = NULL, "
+                "fields_confirmed_at = NULL, reviewed_at = NULL "
+                "WHERE id = ? AND user_id = ? AND status = '반려'",
+                (draft_id, user["id"]),
+            )
+            if updated.rowcount == 0:
+                raise HTTPException(
+                    status_code=409, detail={"code": "DRAFT_NOT_REJECTED"}
+                )
+            old = conn.execute(
+                "SELECT file_path FROM document WHERE draft_id = ?", (draft_id,)
+            ).fetchone()
+            if old is None:
+                conn.execute(
+                    "INSERT INTO document (draft_id, file_path, mime_type, page_count) "
+                    "VALUES (?, ?, ?, ?)",
+                    (draft_id, str(new_path), mime_type, page_count),
+                )
+            else:
+                old_path = old["file_path"]
+                # 이전 문서로 만든 가린 텍스트·빈 쪽 기록은 새 파일과 맞지 않으므로 비운다
+                conn.execute(
+                    "UPDATE document SET file_path = ?, mime_type = ?, page_count = ?, "
+                    "masked_text = NULL, empty_pages = NULL WHERE draft_id = ?",
+                    (str(new_path), mime_type, page_count, draft_id),
+                )
+            # 이전 문서로 만든 입력 항목(과 혹시 남은 입력값)을 지운다 (DATA-MODEL.md document.draft_id)
+            conn.execute(
+                "DELETE FROM field_answer WHERE form_field_id IN "
+                "(SELECT id FROM form_field WHERE draft_id = ?)",
+                (draft_id,),
+            )
+            conn.execute("DELETE FROM form_field WHERE draft_id = ?", (draft_id,))
+    except Exception:
+        new_path.unlink(missing_ok=True)
+        raise
+    finally:
+        conn.close()
+
+    # 이전 원본 파일은 지운다 (R8 최소 수집, pii-items.md "업로드 원본 파일: 재업로드 때 지움")
+    if old_path and old_path != str(new_path):
+        Path(old_path).unlink(missing_ok=True)
+    logger.info("작성 건(%s) 반려 뒤 다시 올림", draft_id)
+
+    return {
+        "draft": {"id": draft_id, "status": "수정", "step": "upload"},
+        "document": {"mime_type": mime_type, "page_count": page_count},
     }
