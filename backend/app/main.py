@@ -15,6 +15,7 @@ from app import (
     documents,
     drafts,
     fields,
+    glossary,
     prior_info_rules,
     privacy_rules,
     writing,
@@ -60,6 +61,7 @@ app.include_router(documents.router)
 app.include_router(fields.router)
 app.include_router(writing.router)
 app.include_router(privacy_rules.router)
+app.include_router(glossary.router)
 app.include_router(prior_info_rules.router)
 
 
