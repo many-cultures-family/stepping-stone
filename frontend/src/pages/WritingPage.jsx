@@ -16,8 +16,8 @@ import { isMismatch, priorValueFor } from '../utils/priorMismatch.js'
 import { fontFor, formatError, inputRect, isInput, joinDate, splitDate } from '../utils/writingLayout.js'
 
 // F-04 가상 작성 (VIRTUAL-FORM-API.md 항목 1). 원본 페이지 이미지 위에, 칸 위치(bbox)마다 형식에 맞는 입력칸을 겹쳐 그린다.
-// - 입력값은 서버에 보내지 않고(no-server-storage-user-input.md) 브라우저에만 둔다. [제안] sessionStorage(utils/browserStore.js):
-//   새로고침해도 남고 탭을 닫으면 지워진다. 작성 건을 취소하거나 로그아웃해도 지운다 (보관 위치는 data-flow.md 5절 #3 팀 결정 전)
+// - 입력값은 서버에 보내지 않고(no-server-storage-user-input.md) 브라우저에만 둔다. sessionStorage(utils/browserStore.js):
+//   새로고침해도 남고 탭을 닫으면 지워진다. 작성 건을 취소하거나 로그아웃해도 지운다 (data-flow.md 5절 #3 결정)
 // - 형식 검사는 서버가 준 pattern 으로 브라우저가 한다 (R3, 규칙 출처는 서버 input_format 하나)
 // - 서명(signature) 칸은 입력받지 않고 '직접 서명' 자리만 표시한다 (R10)
 // - 실제 기관에 보내지 않는 연습 화면임을 알린다 (R4)
