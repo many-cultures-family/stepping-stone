@@ -2,17 +2,19 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Box, Button, ButtonBase, Popper, Typography } from '@mui/material'
 import { useExplain } from '../../explain/useExplain.js'
 import { ds } from '../../theme.js'
-import { splitByTerms } from '../../utils/findTerms.js'
+import { splitWords } from '../../utils/splitWords.js'
 
-// 문서 속 글자(칸 제목·안내 문구)를 그리면서, 어려운 말의 설명을 볼 수 있게 한다 (F-05)
-// - 용어 사전에 있는 말은 점선 밑줄 버튼이 된다. 누르면 설명 창을 연다 (키보드로도 된다).
+// 문서 속 글자(칸 제목·안내 문구·문서 본문 줄)를 그리면서, 어려운 말의 설명을 볼 수 있게 한다 (F-05)
+// - 낱말마다 누를 수 있다. 누르면 설명 창이 그 낱말을 용어 사전에 묻는다 (WORD-EXPLAIN-API.md 항목 1, 키보드로도 된다).
+//   사전 전체 목록 API가 없어 '사전에 있는 말'을 미리 표시하지 않는다.
+// - [이름] 같은 가린 개인정보 토큰은 누를 수 없고 '가려진 정보'로 보여 준다.
 // - 마우스·손가락으로 글자를 끌어서 고르면 '고른 말 설명 보기' 버튼이 뜬다.
 // - sentenceButton 이면 끝에 '문장 풀이' 버튼을 붙여 글 전체를 설명받게 한다.
 // - 사용자가 쓴 답변·사전 정보에는 쓰지 않는다. 그 값은 L2에 보내면 안 된다 (03 3-4 L2).
 // - 설명 Provider 밖이거나 로그인 전이면 글자만 그린다.
 export default function ExplainableText({ text, component = 'span', variant, sx, sentenceButton = false }) {
   const explain = useExplain()
-  const parts = useMemo(() => splitByTerms(text ?? '', explain?.terms), [text, explain?.terms])
+  const parts = useMemo(() => splitWords(text ?? ''), [text])
   const box = useRef(null)
   const [picked, setPicked] = useState(null)
 
@@ -62,14 +64,23 @@ export default function ExplainableText({ text, component = 'span', variant, sx,
         sx={sx}
       >
         {parts.map((p, i) =>
-          p.term ? (
+          p.kind === 'masked' ? (
+            <Box
+              key={i}
+              component="span"
+              title="가려진 정보"
+              sx={{ px: 0.5, borderRadius: 0.5, bgcolor: ds.line, color: ds.text2, fontSize: '0.9em' }}
+            >
+              {p.text}
+            </Box>
+          ) : p.kind === 'word' ? (
             <ButtonBase
               key={i}
               component="span"
               role="button"
               aria-haspopup="dialog"
-              aria-label={`${p.text} 뜻 보기`}
-              onClick={(e) => explain.openExplain(p.text, { el: e.currentTarget }, p.term)}
+              aria-label={`${p.word} 뜻 보기`}
+              onClick={(e) => explain.openExplain(p.word, { el: e.currentTarget })}
               sx={{
                 display: 'inline',
                 font: 'inherit',
@@ -77,8 +88,8 @@ export default function ExplainableText({ text, component = 'span', variant, sx,
                 verticalAlign: 'baseline',
                 // ButtonBase 기본값(user-select: none)이면 문장을 끌어서 고를 때 이 말이 빠진다
                 userSelect: 'text',
-                textDecoration: `underline dotted ${ds.primary}`,
-                textDecorationThickness: 2,
+                textDecoration: `underline dotted ${ds.primaryLine}`,
+                textDecorationThickness: 1,
                 textUnderlineOffset: '0.22em',
                 borderRadius: 0.5,
                 '&:hover': { bgcolor: ds.primarySoft },
