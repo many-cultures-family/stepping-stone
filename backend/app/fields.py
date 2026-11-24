@@ -123,11 +123,6 @@ def _insert_fields(conn, draft_id, llm_fields):
 
 
 def _delete_fields(conn, draft_id):
-    conn.execute(
-        "DELETE FROM field_answer WHERE form_field_id IN "
-        "(SELECT id FROM form_field WHERE draft_id = ?)",
-        (draft_id,),
-    )
     conn.execute("DELETE FROM form_field WHERE draft_id = ?", (draft_id,))
 
 
