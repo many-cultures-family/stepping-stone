@@ -197,3 +197,106 @@ def test_consent_choice_without_options_gets_yes_no(monkeypatch):
     assert fields[0]["options"] == ["동의합니다", "동의하지 않습니다"]
     # 동의가 아닌 선택형은 보기를 지어내지 않는다
     assert fields[1].get("options") is None
+
+
+# ── L3 서술형 답변 검토 (PR #26 테스트 틀을 form_field_id·masked_text에 맞춤) ──
+
+L3_ANSWERS = [
+    {
+        "form_field_id": 31,
+        "label": "신청 사유",
+        "guide_text": "이유를 쓰세요",
+        "masked_text": "저는 [이름1]입니다",
+    }
+]
+
+
+def _fake_l3(monkeypatch, suggestions, seen=None):
+    def fake(prompt, schema=None):
+        if seen is not None:
+            seen.update(prompt=prompt, schema=schema)
+        return (
+            json.dumps(suggestions) if not isinstance(suggestions, str) else suggestions
+        )
+
+    monkeypatch.setattr(llm, "_call_gemini", fake)
+
+
+def test_review_answers_returns_empty_without_calling_llm_when_no_answers(monkeypatch):
+    def fail_if_called(prompt, schema=None):
+        raise AssertionError("답변이 없으면 L3을 부르면 안 된다")
+
+    monkeypatch.setattr(llm, "_call_gemini", fail_if_called)
+    assert llm.review_answers([], language="vi") == []
+
+
+def test_review_answers_returns_parsed_list(monkeypatch):
+    fake = [
+        {
+            "form_field_id": 31,
+            "kind": "맞춤법",
+            "suggested_text": "고친 답변",
+            "explanation": " 설명 ",
+        },
+        {"form_field_id": 31, "kind": "보충", "explanation": "더 쓰세요"},
+    ]
+    seen = {}
+    _fake_l3(monkeypatch, fake, seen)
+    assert llm.review_answers(L3_ANSWERS, language="vi") == [
+        {
+            "form_field_id": 31,
+            "kind": "맞춤법",
+            "suggested_text": "고친 답변",
+            "explanation": "설명",
+        },
+        {
+            "form_field_id": 31,
+            "kind": "보충",
+            "suggested_text": None,
+            "explanation": "더 쓰세요",
+        },
+    ]
+    assert seen["schema"] == llm.REVIEW_RESPONSE_SCHEMA
+
+
+def test_review_prompt_sends_masked_answer_and_token_rule(monkeypatch):
+    seen = {}
+    _fake_l3(monkeypatch, [], seen)
+    llm.review_answers(L3_ANSWERS, language="vi")
+    prompt = seen["prompt"]
+    assert "저는 [이름1]입니다" in prompt and "이유를 쓰세요" in prompt
+    assert "토큰은 글자 하나 바꾸지 말고 그대로 둔다" in prompt
+    assert "베트남어" in prompt
+
+
+@pytest.mark.parametrize(
+    "item",
+    [
+        {
+            "form_field_id": 999,
+            "kind": "맞춤법",
+            "explanation": "설명",
+        },  # 보내지 않은 id
+        {"form_field_id": True, "kind": "맞춤법", "explanation": "설명"},
+        {"form_field_id": 31, "kind": "오타", "explanation": "설명"},  # 허용 목록 밖
+        {"form_field_id": 31, "kind": "질문 의도", "explanation": ""},
+        {
+            "form_field_id": 31,
+            "kind": "문법",
+            "suggested_text": 3,
+            "explanation": "설명",
+        },
+        "문자열 항목",
+    ],
+)
+def test_review_answers_rejects_bad_item(monkeypatch, item):
+    _fake_l3(monkeypatch, [item])
+    with pytest.raises(llm.LLMCallError):
+        llm.review_answers(L3_ANSWERS, language="vi")
+
+
+@pytest.mark.parametrize("reply", ["not json", '{"a": 1}'])
+def test_review_answers_rejects_non_list(monkeypatch, reply):
+    _fake_l3(monkeypatch, reply)
+    with pytest.raises(llm.LLMCallError):
+        llm.review_answers(L3_ANSWERS, language="vi")

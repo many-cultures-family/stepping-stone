@@ -1,4 +1,4 @@
-# L1 입력 항목 추론·L2 쉬운 풀이 (03-rules-states-llm.md 3-4 L1·L2). Gemini 호출은 서버 코드 중 이 파일에서만 한다
+# L1 입력 항목 추론·L2 쉬운 풀이·L3 서술형 검토 (03-rules-states-llm.md 3-4 L1·L2·L3). Gemini 호출은 서버 코드 중 이 파일에서만 한다
 # (CLAUDE.md "LLM은 FastAPI 서버에서만 호출한다"). 모델명은 .env(GEMINI_MODEL)에서만 읽는다.
 import json
 import os
@@ -286,3 +286,127 @@ def _build_explain_prompt(selected_text, language, glossary_explanation):
             f"용어 사전 기본 설명(사용자가 이것으로 이해하지 못했다): {glossary_explanation}"
         )
     return "\n".join(parts)
+
+
+# ── L3 서술형 답변 검토 (03-rules-states-llm.md 3-4 L3, REVIEW-PRIVACY-API.md 항목 3 ⑥) ──
+# PR #26(feat/f02-field-check-v2-leehyosang6950)의 review_answers·_validate_suggestion_shape를 가져와
+# 명세에 맞게 바꿨다: 답변 id는 field_answer.id가 아니라 form_field.id, 답변은 브라우저가 가린 masked_text,
+# 프롬프트에 "토큰은 그대로 두고 값을 짐작하지 말 것" 지시를 넣었다 (l3-masking.md 5절 ⑥).
+
+# 제안 종류 (DATA-MODEL.md review_suggestion.kind)
+REVIEW_KINDS = ["맞춤법", "문법", "질문 의도", "보충"]
+
+REVIEW_RESPONSE_SCHEMA = {
+    "type": "ARRAY",
+    "items": {
+        "type": "OBJECT",
+        "properties": {
+            "form_field_id": {"type": "INTEGER"},
+            "kind": {"type": "STRING", "enum": REVIEW_KINDS},
+            "suggested_text": {"type": "STRING", "nullable": True},
+            "explanation": {"type": "STRING"},
+        },
+        "required": ["form_field_id", "kind", "explanation"],
+    },
+}
+
+
+def review_answers(answers, language):
+    """L3을 호출해 서술형 답변의 맞춤법·문법과 질문 의도 대비 적합성을 검토한다 (F-06, US-05).
+
+    보내는 것: answers = [{"form_field_id", "label", "guide_text", "masked_text"}, ...]
+    (칸 id, 칸 이름, 질문 안내문(서버 값), 브라우저가 개인정보를 토큰으로 가린 답변), language.
+    보내지 않는 것: 답변 원문, 토큰 대응표, 사전 정보 (서버에 오지 않는다).
+    가린 답변에 개인정보가 남았는지 다시 검사하는 일(⑤)과 제안의 토큰 검사(⑦)는 호출부 책임이다.
+
+    반환: [{"form_field_id", "kind", "suggested_text", "explanation"}, ...]
+    L3 출력은 신뢰하지 않는다 — kind가 허용 목록 밖이거나 form_field_id가 보낸 답변에 없는
+    제안이 있으면 거절한다 (화면이 엉뚱한 칸에 제안을 붙이는 일을 막는다).
+    """
+    if not answers:
+        return []
+    known_ids = {a["form_field_id"] for a in answers}
+    prompt = _build_review_prompt(answers, language)
+    response_text = _call_gemini(prompt, schema=REVIEW_RESPONSE_SCHEMA)
+    try:
+        suggestions = json.loads(response_text)
+    except ValueError as exc:
+        raise LLMCallError(f"L3 응답이 JSON이 아님: {exc}") from exc
+    if not isinstance(suggestions, list):
+        raise LLMCallError("L3 응답이 배열이 아님")
+    for item in suggestions:
+        _validate_suggestion_shape(item, known_ids)
+    return [
+        {
+            "form_field_id": item["form_field_id"],
+            "kind": item["kind"],
+            "suggested_text": item.get("suggested_text"),
+            "explanation": item["explanation"].strip(),
+        }
+        for item in suggestions
+    ]
+
+
+def _validate_suggestion_shape(item, known_ids):
+    if not isinstance(item, dict):
+        raise LLMCallError(f"L3 항목이 객체가 아님: {item!r}")
+    form_field_id = item.get("form_field_id")
+    if (
+        not isinstance(form_field_id, int)
+        or isinstance(form_field_id, bool)
+        or form_field_id not in known_ids
+    ):
+        raise LLMCallError(
+            f"L3 항목의 form_field_id가 올바르지 않음: {form_field_id!r}"
+        )
+    if item.get("kind") not in REVIEW_KINDS:
+        raise LLMCallError(f"L3 항목의 kind가 허용 목록 밖임: {item.get('kind')!r}")
+    suggested_text = item.get("suggested_text")
+    if suggested_text is not None and not isinstance(suggested_text, str):
+        raise LLMCallError(
+            f"L3 항목의 suggested_text가 문자열이 아님: {suggested_text!r}"
+        )
+    explanation = item.get("explanation")
+    if not isinstance(explanation, str) or not explanation.strip():
+        raise LLMCallError(f"L3 항목의 explanation이 비어 있음: {explanation!r}")
+
+
+def _build_review_prompt(answers, language):
+    kinds = "/".join(REVIEW_KINDS)
+    language_name = LANGUAGE_NAMES.get(language, language)
+    parts = [
+        (
+            "다음은 한국어 신청서의 서술형 칸에 사용자가 쓴 답변 목록이다. "
+            "각 답변의 맞춤법·문법을 검토하고, 질문 의도에 비해 답변이 부족하거나 "
+            "어긋나는 곳이 있으면 짚어라. 고칠 곳이 없으면 그 답변은 건너뛴다."
+        ),
+        (
+            f"제안 종류(kind)는 다음 중 하나다: {kinds}. "
+            "맞춤법·문법은 틀린 부분을 고친 전체 문장을 suggested_text에 한국어로 담고, "
+            "질문 의도·보충은 suggested_text를 null로 두고 explanation에만 설명한다."
+        ),
+        (
+            "답변 속 대괄호 토큰([이름1], [전화번호1], [가림1] 등)은 가린 개인정보다. "
+            "suggested_text에서 토큰은 글자 하나 바꾸지 말고 그대로 둔다. "
+            "새 토큰을 만들지 않는다. 토큰 안의 값을 짐작하거나 설명에 쓰지 않는다."
+        ),
+        (
+            "응답은 각 제안이 다음 키를 가진 JSON 배열로만 답하라: "
+            "form_field_id(아래 id 중 하나), kind, suggested_text(없으면 null), "
+            f"explanation(사용자에게 보여 줄 제안 이유, 반드시 {language_name}로 쓴다)."
+        ),
+        "답변 목록:\n"
+        + json.dumps(
+            [
+                {
+                    "form_field_id": a["form_field_id"],
+                    "label": a.get("label"),
+                    "guide_text": a.get("guide_text"),
+                    "answer": a["masked_text"],
+                }
+                for a in answers
+            ],
+            ensure_ascii=False,
+        ),
+    ]
+    return "\n\n".join(parts)
