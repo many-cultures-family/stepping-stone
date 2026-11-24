@@ -25,6 +25,7 @@ const PRIVACY_KIND = {
   resident_no: { title: '주민등록번호', hint: '서술형 답변에는 보통 쓰지 않아도 되는 번호예요.' },
   alien_no: { title: '외국인등록번호', hint: '서술형 답변에는 보통 쓰지 않아도 되는 번호예요.' },
   address: { title: '주소' },
+  long_number: { title: '긴 번호', hint: '계좌·여권·카드 번호처럼 보이는 숫자예요.' },
 }
 
 // 결정 3가지 (R7). 값은 DATA-MODEL.md privacy_detection.decision 그대로
@@ -37,7 +38,6 @@ const PRIVACY_CHOICES = [
 const ERROR_TEXT = {
   NETWORK_ERROR: '서버 연결 실패. 잠시 후 다시 시도해 주세요.',
   PRIVACY_UNDECIDED: '아직 정하지 않은 항목이 있어요. 모두 고른 뒤 다시 눌러 주세요.',
-  DETECTION_NOT_FOUND: '답변이 바뀌어서 다시 확인해야 해요. 창을 닫고 다시 검토를 받아 주세요.',
 }
 
 const CONTEXT = 18

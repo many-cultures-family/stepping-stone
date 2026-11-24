@@ -53,8 +53,11 @@ function AppContent() {
       )}
       {route.name === 'landing' && <LandingPage />}
       {/* 업로드는 로그인이 필요하다. 별도 로그인 화면 없이 LoginRequired 블록을 재사용한다. */}
-      {route.name === 'upload' && status === 'authenticated' && <UploadPage />}
-      {route.name === 'upload' && status === 'anonymous' && (
+      {route.name === 'upload' && status === 'authenticated' && <UploadPage key="new" />}
+      {route.name === 'reupload' && status === 'authenticated' && (
+        <UploadPage key={`reupload-${route.params.draftId}`} replaceDraftId={route.params.draftId} />
+      )}
+      {(route.name === 'upload' || route.name === 'reupload') && status === 'anonymous' && (
         <Container sx={{ py: 6 }}>
           <LoginRequired message="로그인한 뒤 문서를 올릴 수 있어요." />
         </Container>
@@ -126,7 +129,7 @@ function PriorInfoRoute({ draftId, language }) {
   )
 }
 
-// F-06 서술형 답변 검토 + F-07 개인정보 감지. 데이터는 api/review.js·api/privacy.js(명세 전이라 [제안], 목 전용)를 거친다.
+// F-06 서술형 답변 검토 + F-07 개인정보 감지. 검토는 api/review.js(목 전용), 감지 규칙은 api/privacy.js(GET /api/privacy-rules)를 거친다.
 function AnswerReviewRoute({ draftId }) {
   const review = useAnswerReview(draftId)
   const { busy, error, run, clearError } = useSingleFlight()
@@ -142,7 +145,6 @@ function AnswerReviewRoute({ draftId }) {
         detections={review.detections}
         pendingDetections={review.pendingDetections}
         privacyError={review.privacyError}
-        privacySaving={review.privacySaving}
         onRequestReview={review.request}
         onConfirmPrivacy={review.confirmPrivacy}
         onCancelPrivacy={review.cancelPrivacy}

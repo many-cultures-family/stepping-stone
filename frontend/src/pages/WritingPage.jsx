@@ -4,6 +4,7 @@ import { USE_MOCK } from '../api/client.js'
 import { getPriorInfo } from '../api/priorInfo.js'
 import { getForm, pageImageUrl } from '../api/writing.js'
 import { useAuth } from '../auth/useAuth.js'
+import ExplainableText from '../components/explain/ExplainableText.jsx'
 import { AlertCircleIcon, CheckCircleIcon, PenIcon, ShieldIcon } from '../components/icons.jsx'
 import PageHero from '../components/PageHero.jsx'
 import { Container, Pill } from '../components/ui.jsx'
@@ -556,7 +557,8 @@ function FieldHelp({ field, value, error }) {
     <Box aria-live="polite" sx={{ ...squircle(radius.card), bgcolor: ds.white, border: `1px solid ${ds.line}`, p: 3 }}>
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
         <Typography variant="h4" component="h2">
-          {field.label}
+          {/* 칸 제목은 문서 속 글자라 설명(F-05)을 붙인다. 내가 쓴 값·사전 정보에는 붙이지 않는다 (L2에 보내면 안 됨) */}
+          <ExplainableText text={field.label} />
         </Typography>
         {field.format_label && (
           <Pill tone={signature ? 'orange' : 'soft'} size="sm">
@@ -573,6 +575,19 @@ function FieldHelp({ field, value, error }) {
         <Typography variant="body2" sx={{ color: ds.text2, mt: 1.5, wordBreak: 'keep-all' }}>
           {field.description}
         </Typography>
+      )}
+      {/* 선택형 보기도 문서 속 글자다. 종이 위 보기는 누르면 바로 골라지므로 설명은 여기서 본다 */}
+      {field.options?.length > 0 && (
+        <Box sx={{ mt: 1.5 }}>
+          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+            보기
+          </Typography>
+          <Stack component="ul" spacing={0.5} sx={{ m: 0, mt: 0.5, pl: 2.5 }}>
+            {field.options.map((o) => (
+              <ExplainableText key={o} text={o} component="li" variant="body2" />
+            ))}
+          </Stack>
+        </Box>
       )}
       {signature ? (
         <Typography variant="body2" sx={{ mt: 1.5, fontWeight: 600, color: ds.orange }}>
