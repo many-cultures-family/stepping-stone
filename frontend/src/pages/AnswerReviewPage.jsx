@@ -9,6 +9,7 @@ import { ds, radius, squircle } from '../theme.js'
 
 // 오류 코드 → 문구 (DESIGN.md "오류" 상태). F-06 API 명세가 나오면 그 오류 코드를 이 표에 더한다.
 const ERROR_TEXT = {
+  PRIVACY_RULES_INVALID: '개인정보 확인 규칙을 불러오지 못해 검토를 시작할 수 없어요. 잠시 후 다시 열어 주세요.',
   LOGIN_REQUIRED: '로그인이 필요해요. 다시 로그인해 주세요.',
   LLM_CALL_FAILED: 'AI 검토를 받지 못했어요. 잠시 후 다시 시도해 주세요.',
   PRIVACY_UNDECIDED: '개인정보를 어떻게 할지 먼저 정해야 AI 검토를 받을 수 있어요.',

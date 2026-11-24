@@ -11,7 +11,6 @@
 // 답변 데이터는 mocks/answers.js 에 있다 (개인정보 감지 목과 같이 쓴다).
 import { ApiError } from '../api/client.js'
 import { ANSWER_SCENARIOS, getMockAnswers } from './answers.js'
-import { undecidedCount } from './privacy.js'
 import { updateDraft } from './drafts.js'
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -54,8 +53,7 @@ export async function requestReview(draftId) {
     throw new ApiError('LLM_CALL_FAILED', { status: 502, code: 'LLM_CALL_FAILED' })
   }
   if (id === 6) throw new ApiError('서버 연결 실패', { code: 'NETWORK_ERROR' })
-  // R7: 감지된 개인정보를 사용자가 모두 정하기 전에는 답변을 L3에 보내지 않는다. 서버도 이렇게 막아야 한다 [제안]
-  if (undecidedCount(id) > 0) throw new ApiError('PRIVACY_UNDECIDED', { status: 409, code: 'PRIVACY_UNDECIDED' })
+  // R7(결정 전에는 보내지 않음)은 브라우저가 지킨다 (hooks/useAnswerReview.js). 결정은 서버에 없어서 서버는 확인할 수 없다
   const rows = SUGGESTIONS[scenarioKey(id)] ?? []
   return { suggestions: rows.map((s) => ({ ...s, decision: '미결정' })) }
 }
