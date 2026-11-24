@@ -3,7 +3,7 @@
 // 설명(description)은 서버가 user.language 로 한 번 만든다. 그래서 언어 쿼리를 보내지 않는다.
 import { request } from './client.js'
 
-export { REANALYSIS_LIMIT } from './limits.js'
+export { reanalysisLimitOf } from './limits.js'
 
 /**
  * 입력 형식 목록 `GET /api/input-formats` (경로·모양 [제안], 백엔드 #36). 형식 규칙의 단일 출처(input_format 테이블).

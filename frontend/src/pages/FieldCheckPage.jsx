@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Box, Button, ButtonBase, CircularProgress, Collapse, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Skeleton, Snackbar, Stack, Typography } from '@mui/material'
 import { confirmFields, inferFields, requestReanalysis } from '../api/fields.js'
-import { REANALYSIS_LIMIT } from '../api/limits.js'
+import { reanalysisLimitOf } from '../api/limits.js'
 import { useAuth } from '../auth/useAuth.js'
 import DocumentPreview from '../components/DocumentPreview.jsx'
 import FieldRow from '../components/FieldRow.jsx'
@@ -22,7 +22,8 @@ const ERROR_TEXT = {
   DRAFT_NOT_EDITABLE: '이 문서는 더 이상 고칠 수 없어요.',
   FIELD_NOT_FOUND: '항목을 찾을 수 없어요. 화면을 새로 불러와 주세요.',
   NO_FIELDS_FLAGGED: "'원본과 달라요'로 표시한 항목이 없어요.",
-  REANALYSIS_LIMIT_EXCEEDED: '다시 분석은 3번까지만 할 수 있어요.',
+  // 한도는 작성 건마다 서버 값(reanalysis_limit)을 따르므로 숫자를 적지 않는다
+  REANALYSIS_LIMIT_EXCEEDED: '다시 분석 횟수를 다 썼어요.',
   FIELDS_INVALID: '확인이 필요한 항목이 있어요. 빨간 항목을 확인해 주세요.',
   INVALID_FLAGGED_FIELD_IDS: '표시한 항목을 확인하지 못했어요. 화면을 새로 불러와 주세요.',
   // 422: 글자 인식(OCR)이 안 됐거나 실패한 문서. 다시 시도해도 같으니 문서를 다시 올리게 안내한다
@@ -106,7 +107,7 @@ export default function FieldCheckPage({ draftId, file, onDone, onNext, onReuplo
   const flaggedIds = fields.filter((f) => f.flagged_wrong).map((f) => f.id)
   const requiredCount = fields.filter((f) => f.required === true).length
   const optionalCount = fields.filter((f) => f.required === false).length
-  const reanalysisLeft = draft ? REANALYSIS_LIMIT - draft.reanalysis_count : 0
+  const reanalysisLeft = draft ? reanalysisLimitOf(draft) - draft.reanalysis_count : 0
 
   function select(id) {
     setSelectedId((cur) => (cur === id ? null : id))
