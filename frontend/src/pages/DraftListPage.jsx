@@ -25,6 +25,7 @@ import PageHero from '../components/PageHero.jsx'
 import { Container, Pill } from '../components/ui.jsx'
 import { navigate } from '../router.js'
 import { ds, radius, squircle } from '../theme.js'
+import { clearDraftInput } from '../utils/browserStore.js'
 import { REJECT_HINT, rejectText } from '../utils/rejectReason.js'
 
 // API 오류 코드 → 문구 (DRAFT-STATUS-API.md 실패 응답). 코드 → 문구는 이 표 한 곳에서만 고른다.
@@ -203,6 +204,8 @@ export default function DraftListPage() {
         setToast({ severity: 'success', text: '제출 완료로 기록했어요.' })
       } else {
         const res = await cancelDraft(draft.id)
+        // 서버가 문서·항목을 지우므로(T3) 브라우저에 남은 가상 작성 입력값도 지운다
+        clearDraftInput(res.id)
         setDrafts((list) => list.filter((d) => d.id !== res.id))
         setCanceled((list) => [{ ...draft, status: res.status, next_action: null }, ...list.filter((d) => d.id !== res.id)])
         setTab('canceled')
