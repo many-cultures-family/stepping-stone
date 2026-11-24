@@ -48,6 +48,8 @@ def _row_to_field(row, input_formats):
         "required": bool(required) if required is not None else None,
         "prior_info_key": row["prior_info_key"],
         "description": row["description"],
+        # choice의 보기 (GET .../form과 같은 값). 선택형이 아니거나 보기가 없으면 null
+        "options": json.loads(row["options"]) if row["options"] else None,
         "bbox": json.loads(row["bbox"]),
         "flagged_wrong": bool(row["flagged_wrong"]),
     }
