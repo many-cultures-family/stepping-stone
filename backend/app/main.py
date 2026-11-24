@@ -14,6 +14,7 @@ from app import (
     db,
     documents,
     drafts,
+    explanations,
     fields,
     glossary,
     privacy_rules,
@@ -61,6 +62,7 @@ app.include_router(fields.router)
 app.include_router(writing.router)
 app.include_router(privacy_rules.router)
 app.include_router(glossary.router)
+app.include_router(explanations.router)
 
 
 @app.exception_handler(RequestValidationError)
