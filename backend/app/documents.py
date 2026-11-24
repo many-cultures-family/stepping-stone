@@ -215,12 +215,8 @@ async def reupload_document(
                     "masked_text = NULL, empty_pages = NULL WHERE draft_id = ?",
                     (str(new_path), mime_type, page_count, draft_id),
                 )
-            # 이전 문서로 만든 입력 항목(과 혹시 남은 입력값)을 지운다 (DATA-MODEL.md document.draft_id)
-            conn.execute(
-                "DELETE FROM field_answer WHERE form_field_id IN "
-                "(SELECT id FROM form_field WHERE draft_id = ?)",
-                (draft_id,),
-            )
+            # 이전 문서로 만든 입력 항목을 지운다 (DATA-MODEL.md document.draft_id).
+            # 입력값은 서버에 저장하지 않으므로 지울 것이 없다 (no-server-storage-user-input.md)
             conn.execute("DELETE FROM form_field WHERE draft_id = ?", (draft_id,))
     except Exception:
         new_path.unlink(missing_ok=True)
