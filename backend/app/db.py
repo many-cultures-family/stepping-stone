@@ -3,6 +3,8 @@ import os
 import sqlite3
 from pathlib import Path
 
+from app.glossary_seed import GLOSSARY_LANGUAGE, SEED_GLOSSARY
+
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 # 테스트·시연용 시드 사용자 (DATA-MODEL 시드 2번, 가짜 값). 테스트는 이 google_sub로 로그인한다
@@ -163,6 +165,12 @@ def init_db():
             "INSERT OR IGNORE INTO input_format (code, label, pattern, example) "
             "VALUES (?, ?, ?, ?)",
             SEED_INPUT_FORMATS,
+        )
+        # 용어 사전 (WORD-EXPLAIN-API.md "운영 방식"). 시드가 사전의 출처라 이미 있는 용어는 설명을 바꾼다
+        conn.executemany(
+            "INSERT INTO glossary_term (term, language, explanation) VALUES (?, ?, ?) "
+            "ON CONFLICT (term, language) DO UPDATE SET explanation = excluded.explanation",
+            [(term, GLOSSARY_LANGUAGE, text) for term, text in SEED_GLOSSARY],
         )
         # get_seed_user_id는 로그인(PR #17)이 들어오며 지워졌다. 시드 사용자 id는
         # 여기서만 필요하므로 바로 조회한다
