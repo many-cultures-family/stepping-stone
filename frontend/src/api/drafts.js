@@ -31,3 +31,21 @@ export function submitDraft(draftId) {
 export function cancelDraft(draftId) {
   return request(`/drafts/${draftId}:cancel`, { method: 'POST' })
 }
+
+// 되돌리기 API 가 서버에 있는지. 효상 님 전이 API 가 아직 없어서 꺼 둔다 (켜면 404 가 난다).
+// 서버에 생기면 true 로 바꾸면 작성 목록 카드에 되돌리기 버튼이 보인다.
+export const REVERT_AVAILABLE = false
+
+/**
+ * 단계 되돌리기 POST /api/drafts/{id}:revert [제안] (제안서 상태 전이 표의 '되돌릴 수 있나')
+ * 본문 { to } — 되돌릴 수 있는 것은 세 가지뿐이다.
+ *   작성중(writing) → 사전정보입력완료: { to: 'prior_info' }  사전 정보 자체가 틀렸음을 발견했을 때
+ *   검토완료(review) → 작성중:          { to: 'writing' }     검토 제안을 반영하거나 내용을 다시 고칠 때
+ *   작성완료(status 성공, 제출 전) → 작성중: { to: 'writing' } 제출 전에 다시 고칠 내용을 발견했을 때
+ * 가상 작성 입력값은 브라우저에 있으므로 서버는 단계만 바꾼다. 검토·재분석 횟수는 되돌리지 않는다.
+ * → { id, status, step, next_action }
+ * 실패: 401, 403, 404 DRAFT_NOT_FOUND, 409 ALREADY_SUBMITTED(제출 기록이 있음) / REVERT_NOT_ALLOWED(그 단계에서 갈 수 없는 곳)
+ */
+export function revertDraft(draftId, to) {
+  return request(`/drafts/${draftId}:revert`, { method: 'POST', body: { to } })
+}
