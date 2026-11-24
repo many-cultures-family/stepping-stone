@@ -91,7 +91,8 @@ function progressIndex(d) {
 
 // next_action → '다음 할 일' 문구와 이동 경로 (DRAFT-STATUS-API.md 항목 1 표).
 // 버튼은 실제 서버에서 그 화면이 열리는 경우에만 둔다. 막다른 길이면 안내 문구만 보여 준다.
-// - PRIOR_INFO·WRITING·REVIEW: 화면(경로)이 아직 없다
+// - PRIOR_INFO: 실서버 모드는 사전 정보 화면(경로)이 아직 없다
+// - REVIEW: 서술형 검토 화면(/drafts/:id/review)은 목·실서버 모두 연다 (api/review.js)
 // - UPLOAD: 업로드 뒤 글자 인식을 못 마친 건(화면을 닫았거나 인식 요청이 실패). 카드에서 바로 인식을 다시 부른다
 //   (OCR-API.md 항목 1). /fields 로 보내면 409 DRAFT_STEP_INVALID 에 막힌다
 // - REJECTED: 같은 작성 건에 다시 올리는 API가 없다(DATA-MODEL.md 는 같은 건의 문서를 바꾼다고 적음).
@@ -103,7 +104,7 @@ const NEXT_ACTION = {
   // 실서버 모드는 사전 정보 화면이 아직 없어서, 카드에서 바로 작성을 시작한다(writing:start). 사전 정보는 작성 화면에서 채우지 않는다
   PRIOR_INFO: { title: '사전 정보를 입력해 주세요', body: USE_MOCK ? '이름·생년월일처럼 자주 쓰는 정보를 먼저 저장해요.' : '사전 정보 입력 화면은 준비 중이에요. 바로 가상 작성을 시작할 수 있어요.', ...(USE_MOCK && { cta: '사전 정보 입력하기', to: (id) => `/drafts/${id}/prior-info` }) },
   WRITING: { title: '가상 작성을 이어서 해 주세요', body: '실제 신청서 위에서 미리 적어 봐요.', cta: '가상 작성하기', to: (id) => `/drafts/${id}/writing` },
-  REVIEW: { title: '작성한 내용을 검토해 주세요', body: USE_MOCK ? '빠진 칸과 틀린 형식이 없는지 마지막으로 확인해요.' : '빠진 칸과 틀린 형식이 없는지 마지막으로 확인해요. (화면 준비 중)', ...(USE_MOCK && { cta: '답변 검토하기', to: (id) => `/drafts/${id}/review` }) },
+  REVIEW: { title: '작성한 내용을 검토해 주세요', body: '빠진 칸과 틀린 형식이 없는지 마지막으로 확인해요.', cta: '답변 검토하기', to: (id) => `/drafts/${id}/review` },
   REJECTED: { title: '이 작성 건은 더 진행할 수 없어요', body: '' },
   SUBMIT: { title: '공식 사이트에서 직접 제출해 주세요', body: "제출을 마쳤다면 '제출 완료'를 눌러 기록을 남겨요. 디딤돌은 기관에 아무것도 보내지 않아요." },
   DONE: { title: '할 일을 모두 마쳤어요', body: '제출 기록이 남아 있어요.' },
