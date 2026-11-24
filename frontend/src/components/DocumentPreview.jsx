@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Box, CircularProgress, Typography } from '@mui/material'
-import { USE_MOCK } from '../api/client.js'
 import { pageImageUrl } from '../api/documents.js'
 import { ds, radius, squircle } from '../theme.js'
 
@@ -26,11 +25,11 @@ const MAX_PAGES = 30
 
 // 원본 미리보기 + 항목 칸 강조 (US-02 "항목을 누르면 원본의 해당 칸이 강조된다").
 // bbox 는 페이지 크기 대비 0~1 비율이라 이미지 크기와 상관없이 % 로 겹쳐 그린다.
-// - 실서버: 서버 원본 페이지 이미지(GET /api/drafts/{id}/document/pages/{page}, api/documents.js pageImageUrl)를 쪽마다 그린다.
+// - 서버 원본 페이지 이미지(GET /api/drafts/{id}/document/pages/{page}, api/documents.js pageImageUrl)를 쪽마다 그린다.
 //   업로드 직후든 새로고침 뒤든 같은 화면이다. PDF 도 서버가 PNG 로 그려 주므로 칸 강조가 된다.
 //   항목 응답에 쪽 수가 없어서, 항목이 있는 마지막 쪽까지 그리고 그다음 쪽을 하나씩 더 불러 본다(404 가 나면 멈춤).
-//   1쪽부터 못 불러오면(세션 만료·파일 없음 등) 업로드 직후 메모리에 있는 file 로 대신 보여 준다.
-// - 목 모드: 업로드 직후 메모리에 있는 file(이미지는 칸 강조, PDF 는 브라우저 기본 뷰어), 없으면 샘플 서식.
+//   1쪽부터 못 불러오면(세션 만료·파일 없음 등) 업로드 직후 메모리에 있는 file 로 대신 보여 준다
+//   (이미지는 칸 강조, PDF 는 브라우저 기본 뷰어). 메모리 파일도 없으면 쪽마다 안내 문구가 나온다.
 export default function DocumentPreview({ draftId, file, fields, selectedId, onSelect, maxHeight }) {
   const scrollRef = useRef(null)
   const boxRefs = useRef({})
@@ -39,14 +38,9 @@ export default function DocumentPreview({ draftId, file, fields, selectedId, onS
   const [loadTick, setLoadTick] = useState(0)
   const onPageLoad = useCallback(() => setLoadTick((t) => t + 1), [])
 
+  // 서버 원본을 1쪽부터 못 불러오고 업로드 직후 메모리 파일이 있을 때만 그 파일로 바꾼다
   const source =
-    !USE_MOCK && !serverFailed
-      ? { kind: 'pages' }
-      : file
-        ? { kind: file.type === 'application/pdf' ? 'pdf' : 'image', url: blobUrlFor(file) }
-        : USE_MOCK
-          ? { kind: 'sample' }
-          : { kind: 'none' }
+    serverFailed && file ? { kind: file.type === 'application/pdf' ? 'pdf' : 'image', url: blobUrlFor(file) } : { kind: 'pages' }
 
   // 고른 칸이 미리보기 가운데 오도록 미리보기 안에서만 스크롤 (페이지 전체는 움직이지 않음). 여러 쪽이어도 화면 위치로 계산한다
   useEffect(() => {
@@ -84,10 +78,6 @@ export default function DocumentPreview({ draftId, file, fields, selectedId, onS
           // 1쪽부터 실패했고 대신 보여 줄 파일이 있으면 그 파일로 바꾼다
           onFirstPageError={file ? () => setServerFailed(true) : undefined}
         />
-      ) : source.kind === 'none' ? (
-        <Typography role="status" sx={{ color: ds.text2, textAlign: 'center', py: 6 }}>
-          원본을 불러오지 못했어요. 새로고침하거나 잠시 후 다시 열어 주세요.
-        </Typography>
       ) : source.kind === 'pdf' ? (
         <>
           <Box
@@ -103,11 +93,7 @@ export default function DocumentPreview({ draftId, file, fields, selectedId, onS
         </>
       ) : (
         <PageFrame>
-          {source.kind === 'sample' ? (
-            <SampleForm fields={fields.filter((f) => pageOf(f) === 1 && hasBox(f))} />
-          ) : (
-            <Box component="img" src={source.url} alt="올린 원본 문서" onLoad={onPageLoad} sx={{ display: 'block', width: '100%' }} />
-          )}
+          <Box component="img" src={source.url} alt="올린 원본 문서" onLoad={onPageLoad} sx={{ display: 'block', width: '100%' }} />
           <FieldBoxes fields={fields.filter((f) => pageOf(f) === 1)} selectedId={selectedId} onSelect={onSelect} registerBox={registerBox} />
         </PageFrame>
       )}
@@ -233,39 +219,4 @@ function FieldBoxes({ fields, selectedId, onSelect, registerBox }) {
       />
     )
   })
-}
-
-// 목 모드에서 파일 없이 들어왔을 때 보여 줄 샘플 서식 (A4 비율). 실제 개인정보는 없다.
-function SampleForm({ fields }) {
-  const W = 1000
-  const H = 1414
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block' }} role="img" aria-label="샘플 신청서">
-      <rect width={W} height={H} fill="#fff" />
-      <text x={W / 2} y={110} textAnchor="middle" fontSize="44" fontWeight="700" fill={ds.ink}>
-        외국인 등록 신청서
-      </text>
-      <text x={W / 2} y={165} textAnchor="middle" fontSize="22" fill={ds.muted}>
-        APPLICATION FOR ALIEN REGISTRATION (샘플)
-      </text>
-      {fields.map((f) => {
-        const x = f.bbox.x * W
-        const y = f.bbox.y * H
-        const w = f.bbox.w * W
-        const h = f.bbox.h * H
-        return (
-          <g key={f.id}>
-            <rect x={x} y={y} width={w} height={h} fill="none" stroke={ds.lineStrong} strokeWidth="2" />
-            <rect x={x} y={y} width={Math.min(170, w * 0.4)} height={h} fill={ds.card} stroke={ds.lineStrong} strokeWidth="2" />
-            <text x={x + 14} y={y + 34} fontSize="22" fill={ds.text2}>
-              {f.label}
-            </text>
-          </g>
-        )
-      })}
-      <text x={80} y={H - 60} fontSize="20" fill={ds.muted}>
-        * 이 화면은 개발용 샘플 서식입니다.
-      </text>
-    </svg>
-  )
 }

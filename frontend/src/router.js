@@ -47,7 +47,7 @@ export function matchRoute(path) {
 }
 
 // 업로드한 File 은 주소에 담을 수 없어서, 다음 화면(원본 미리보기)으로 넘길 때만 메모리에 잠깐 둔다.
-// 새로고침하면 사라지고, 미리보기는 서버 원본(또는 목 모드 샘플 서식)을 쓴다.
+// 새로고침하면 사라지고, 미리보기는 서버 원본을 쓴다 (서버 원본을 못 불러올 때만 이 파일로 대신 보여 준다).
 const pendingFiles = new Map()
 export function setPendingFile(draftId, file) {
   pendingFiles.set(Number(draftId), file)
