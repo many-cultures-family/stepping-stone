@@ -6,7 +6,7 @@ import PriorInfoField from '../components/prior-info/PriorInfoField.jsx'
 import { Container } from '../components/ui.jsx'
 import { PRIOR_INFO_FIELDS, PRIOR_INFO_KEYS } from '../i18n/priorInfo.js'
 import { ds, radius, squircle } from '../theme.js'
-import { groupPriorInfoErrors, validatePriorInfo } from '../utils/validatePriorInfo.js'
+import { groupPriorInfoErrors, indexFormats, validatePriorInfo } from '../utils/validatePriorInfo.js'
 
 // 오류 코드 → 문구 (DESIGN.md "오류" 상태). F-03 API 명세가 나오면 그 오류 코드를 이 표에 더한다.
 const ERROR_TEXT = {
@@ -22,6 +22,7 @@ const errorText = (code) => ERROR_TEXT[code] ?? '문제가 생겼어요. 다시 
 //   savedInfo:    { [info_key]: value }  이 사용자가 이미 저장한 사전 정보
 //   requiredKeys: 이 작성 건 입력 항목에 연결된 prior_info_key 목록. 주면 '작성 건 모드'(흐름 ③),
 //                 안 주면 4개 전부를 고치는 '관리 모드'
+//   formats:      서버 입력 형식 목록 [{ code, pattern, example }] (GET /api/input-formats). 없으면 기본 규칙으로 검사
 //   serverErrors: 서버 규칙 엔진 결과 [{ info_key, code }] (화면 미리보기보다 먼저 보여 준다, R3)
 // - status: 'loading'(불러오는 중) · 'idle' · 'saving' · 'error'
 // - 저장된 값은 입력 칸에 자동으로 채운다(R11 "다시 묻지 않는다"). 작성 건 모드에서 필요한 값이
@@ -32,6 +33,7 @@ const errorText = (code) => ERROR_TEXT[code] ?? '문제가 생겼어요. 다시 
 export default function PriorInfoPage({
   language = 'ko',
   savedInfo = {},
+  formats = null,
   requiredKeys,
   status = 'idle',
   errorCode = null,
@@ -63,7 +65,8 @@ export default function PriorInfoPage({
   const [expanded, setExpanded] = useState(!(draftMode && allSaved))
 
   const server = groupPriorInfoErrors(serverErrors)
-  const local = Object.fromEntries(keys.map((k) => [k, validatePriorInfo(k, values[k])]))
+  const formatIndex = useMemo(() => indexFormats(formats), [formats])
+  const local = Object.fromEntries(keys.map((k) => [k, validatePriorInfo(k, values[k], formatIndex)]))
   const shownError = (k) => (!editedSinceServer[k] && server[k]) || ((touched[k] || triedSave) && local[k]) || null
 
   const invalidCount = keys.filter((k) => local[k]).length

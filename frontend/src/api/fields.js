@@ -7,6 +7,16 @@ import * as mock from '../mocks/fields.js'
 export { REANALYSIS_LIMIT } from './limits.js'
 
 /**
+ * 입력 형식 목록 `GET /api/input-formats` (경로·모양 [제안], 백엔드 #36). 형식 규칙의 단일 출처(input_format 테이블).
+ * → { formats: [{ code, label, pattern, example }] }  pattern 이 null 이면 형식 검사 없음
+ * 목 모드는 서버 목록이 없어 null 을 돌려준다 → 화면은 기본 규칙으로 대신 검사한다.
+ */
+export function getInputFormats() {
+  if (USE_MOCK) return Promise.resolve(null)
+  return request('/input-formats')
+}
+
+/**
  * 응답 모양 (조회·추론·재분석 공통):
  * { draft: { id, status, step, fields_confirmed_at, reanalysis_count },
  *   fields: [{ id, label, format_code, format_label, format_example, required, prior_info_key,

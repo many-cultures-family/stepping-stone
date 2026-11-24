@@ -105,7 +105,7 @@ function AppContent() {
 // 작성 건 모드의 requiredKeys 는 4개 전부다. 이 작성 건 fields 의 prior_info_key 로 줄이려면 prior_info 단계에서 칸 목록을
 // 읽는 API 가 필요한데, 지금 GET .../fields 는 field_check 단계에서만 열린다.
 function PriorInfoRoute({ draftId, language }) {
-  const { loaded, savedInfo, status, errorCode, save, clear, retry } = usePriorInfo()
+  const { loaded, savedInfo, formats, status, errorCode, save, clear, retry } = usePriorInfo()
   const { busy, error, run, clearError } = useSingleFlight()
   if (!loaded) return <Loading />
   return (
@@ -116,6 +116,7 @@ function PriorInfoRoute({ draftId, language }) {
         key={JSON.stringify(savedInfo)}
         language={language}
         savedInfo={savedInfo}
+        formats={formats}
         requiredKeys={draftId ? PRIOR_INFO_KEYS : undefined}
         status={status}
         errorCode={errorCode}
