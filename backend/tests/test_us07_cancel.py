@@ -49,10 +49,8 @@ def test_us07_cancel_missing_draft_is_404(client):
     assert res.json() == {"detail": {"code": "DRAFT_NOT_FOUND"}}
 
 
-# US-07 (정상): 취소 때 업로드 문서·입력 항목·입력값을 지우되 사전 정보는 남긴다 (T3)
-def test_us07_cancel_deletes_document_and_fields_but_keeps_prior_info(
-    client, db, upload_dir, seed_user_id
-):
+# US-07 (정상): 취소 때 업로드 문서·입력 항목을 지운다 (T3). 입력값·사전 정보는 서버에 없다
+def test_us07_cancel_deletes_document_and_fields(client, db, upload_dir, seed_user_id):
     draft_id = insert_draft(db, seed_user_id, "수정", "field_check")
     upload_dir.mkdir(parents=True, exist_ok=True)
     file_path = upload_dir / "fake.pdf"
@@ -62,16 +60,10 @@ def test_us07_cancel_deletes_document_and_fields_but_keeps_prior_info(
         "VALUES (?, ?, 'application/pdf', 1)",
         (draft_id, str(file_path)),
     )
-    field_cur = db.execute(
+    db.execute(
         "INSERT INTO form_field (draft_id, label, format_code, required, "
         "description, bbox) VALUES (?, '이름', 'name', 1, '설명', '{}')",
         (draft_id,),
-    )
-    db.commit()
-    field_id = field_cur.lastrowid
-    db.execute(
-        "INSERT INTO field_answer (form_field_id, value) VALUES (?, '홍길동')",
-        (field_id,),
     )
     db.commit()
 
@@ -91,14 +83,6 @@ def test_us07_cancel_deletes_document_and_fields_but_keeps_prior_info(
         ).fetchone()[0]
         == 0
     )
-    assert (
-        db.execute(
-            "SELECT COUNT(*) FROM field_answer WHERE form_field_id = ?", (field_id,)
-        ).fetchone()[0]
-        == 0
-    )
-    # 사전 정보는 다른 작성 건이 같이 쓰므로 지우지 않는다 (T3)
-    assert db.execute("SELECT COUNT(*) FROM prior_info").fetchone()[0] > 0
 
 
 # US-07 (권한): 다른 사용자의 작성 건은 취소할 수 없다

@@ -29,13 +29,6 @@ SEED_INPUT_FORMATS = [
     ("signature", "서명", None, "직접 서명 또는 도장"),
 ]
 
-# 시드 사용자의 사전 정보 (DATA-MODEL.md 시드 데이터 2번, 가짜 값)
-SEED_PRIOR_INFO = [
-    ("name", "name", "테스트 사용자"),
-    ("birth_date", "date", "1990.01.01"),
-    ("phone", "phone", "010-0000-1234"),
-]
-
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS user (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,15 +65,6 @@ CREATE TABLE IF NOT EXISTS input_format (
     pattern TEXT,
     example TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS prior_info (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL REFERENCES user(id),
-    info_key TEXT NOT NULL,
-    format_code TEXT NOT NULL REFERENCES input_format(code),
-    value TEXT NOT NULL,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (user_id, info_key)
-);
 CREATE TABLE IF NOT EXISTS form_field (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     draft_id INTEGER NOT NULL REFERENCES draft(id),
@@ -93,12 +77,6 @@ CREATE TABLE IF NOT EXISTS form_field (
     options TEXT,
     bbox TEXT NOT NULL,
     flagged_wrong INTEGER NOT NULL DEFAULT 0
-);
-CREATE TABLE IF NOT EXISTS field_answer (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    form_field_id INTEGER NOT NULL UNIQUE REFERENCES form_field(id),
-    value TEXT,
-    mismatch_acknowledged INTEGER NOT NULL DEFAULT 0
 );
 -- 용어 사전 (DATA-MODEL.md 75~77행, F-05 R5). 팀이 검증해 넣는다.
 -- (term, language)가 정확히 같은 행을 찾으므로 그 둘을 UNIQUE로 둔다 (WORD-EXPLAIN-API.md 항목 1)
@@ -140,6 +118,12 @@ def add_missing_draft_columns(conn):
             conn.execute(f"ALTER TABLE draft ADD COLUMN {name} {definition}")
 
 
+# 사전 정보·입력값은 서버에 저장하지 않는다 (AI-plan docs/decisions/no-server-storage-user-input.md,
+# 2026-11-17 결정). 브라우저에만 둔다. form_field.prior_info_key는 브라우저의 사전 정보와
+# 칸을 잇는 이름이라 남긴다. 예전에 만든 로컬 DB에 남은 두 테이블(가짜 시드 값)은 지운다
+REMOVED_TABLES = ["field_answer", "prior_info"]
+
+
 def get_db_path():
     # 호출할 때마다 읽어서 테스트가 임시 경로로 바꿀 수 있게 한다
     return os.environ.get("DATABASE_PATH", str(BACKEND_DIR / "didimdol.db"))
@@ -157,6 +141,8 @@ def init_db():
     try:
         conn.executescript(SCHEMA)
         add_missing_draft_columns(conn)
+        for table in REMOVED_TABLES:
+            conn.execute(f"DROP TABLE IF EXISTS {table}")
         conn.execute(
             "INSERT OR IGNORE INTO user (google_sub, email, language) VALUES (?, ?, ?)",
             (SEED_GOOGLE_SUB, SEED_EMAIL, SEED_LANGUAGE),
@@ -171,16 +157,6 @@ def init_db():
             "INSERT INTO glossary_term (term, language, explanation) VALUES (?, ?, ?) "
             "ON CONFLICT (term, language) DO UPDATE SET explanation = excluded.explanation",
             [(term, GLOSSARY_LANGUAGE, text) for term, text in SEED_GLOSSARY],
-        )
-        # get_seed_user_id는 로그인(PR #17)이 들어오며 지워졌다. 시드 사용자 id는
-        # 여기서만 필요하므로 바로 조회한다
-        seed_user = conn.execute(
-            "SELECT id FROM user WHERE google_sub = ?", (SEED_GOOGLE_SUB,)
-        ).fetchone()
-        conn.executemany(
-            "INSERT OR IGNORE INTO prior_info (user_id, info_key, format_code, value) "
-            "VALUES (?, ?, ?, ?)",
-            [(seed_user["id"], key, fmt, value) for key, fmt, value in SEED_PRIOR_INFO],
         )
         conn.commit()
     finally:

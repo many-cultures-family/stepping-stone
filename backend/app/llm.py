@@ -22,7 +22,16 @@ FORMAT_CODES = [
     "choice",
     "signature",
 ]
-PRIOR_INFO_KEYS = ["name", "birth_date", "phone", "address"]
+# 사전 정보 종류 → 그 값을 채울 수 있는 칸의 형식. 브라우저가 prior_info_key로 사전 정보를 채우므로
+# (사전 정보는 브라우저에만 있다, no-server-storage-user-input.md) 형식이 다른 칸에 키가 붙으면
+# 서명·선택형 칸에 전화번호가 채워지는 식으로 잘못 채워진다. fields.py가 저장 전에 이 표로 거른다
+PRIOR_INFO_FORMATS = {
+    "name": "name",
+    "birth_date": "date",
+    "phone": "phone",
+    "address": "address",
+}
+PRIOR_INFO_KEYS = list(PRIOR_INFO_FORMATS)
 
 # generationConfig.responseSchema — Gemini가 코드 펜스(```json)로 감싸거나 스키마에
 # 안 맞는 응답을 주지 않도록 강제한다 (F-02 리뷰 — responseMimeType 없이는 응답이

@@ -87,9 +87,22 @@ def _to_int_bool(value):
     return 1 if value else 0
 
 
+def _clean_prior_info_key(item):
+    """브라우저 자동 채움(사전 정보 → 칸)에 쓸 prior_info_key만 남긴다.
+
+    서버는 사전 정보 값을 갖지 않으므로(prior_info_value 없음) 키만 정확하면 된다.
+    모르는 키이거나 칸 형식과 맞지 않는 키(예: signature 칸의 phone)는 비운다.
+    L1 응답 스키마에도 enum이 있지만 Gemini가 늘 지키지는 않으므로 서버에서 다시 거른다.
+    """
+    key = item.get("prior_info_key")
+    if llm.PRIOR_INFO_FORMATS.get(key) != item.get("format_code"):
+        return None
+    return key
+
+
 def _insert_fields(conn, draft_id, llm_fields):
     # llm.infer_fields가 이미 항목별 타입을 검사했으므로(app/llm.py _validate_field_shape)
-    # 여기서는 저장 형식(JSON 문자열 등)으로 바꾸기만 한다
+    # 여기서는 저장 형식(JSON 문자열 등)으로 바꾸고 prior_info_key만 거른다
     for item in llm_fields:
         conn.execute(
             "INSERT INTO form_field (draft_id, label, format_code, required, "
@@ -100,7 +113,7 @@ def _insert_fields(conn, draft_id, llm_fields):
                 item.get("label") or "",
                 item.get("format_code"),
                 _to_int_bool(item.get("required")),
-                item.get("prior_info_key"),
+                _clean_prior_info_key(item),
                 item.get("description") or "",
                 item.get("guide_text"),
                 json.dumps(item["options"]) if item.get("options") else None,
@@ -110,11 +123,6 @@ def _insert_fields(conn, draft_id, llm_fields):
 
 
 def _delete_fields(conn, draft_id):
-    conn.execute(
-        "DELETE FROM field_answer WHERE form_field_id IN "
-        "(SELECT id FROM form_field WHERE draft_id = ?)",
-        (draft_id,),
-    )
     conn.execute("DELETE FROM form_field WHERE draft_id = ?", (draft_id,))
 
 
