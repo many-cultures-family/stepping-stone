@@ -24,7 +24,8 @@ function choiceLabels(hasText) {
 }
 
 // 검토 제안 1개 (F-06, R6: 자동으로 반영하지 않고 사용자가 고른 것만 반영)
-// suggestion: { id, kind, suggested_text, explanation, decision: '미결정' | '반영' | '무시' }
+// suggestion: { id, kind, original, suggested_text, explanation, decision: '미결정' | '반영' | '무시' }
+// original: 서버가 준 위치(R8)로 화면이 답변에서 잘라 낸 원문. 답변 전체에 대한 제안이면 null
 export default function SuggestionCard({ suggestion, onDecide }) {
   const kind = KIND[suggestion.kind] ?? { tone: 'grey', title: suggestion.kind }
   const hasText = Boolean(suggestion.suggested_text)
@@ -64,6 +65,13 @@ export default function SuggestionCard({ suggestion, onDecide }) {
       </Stack>
 
       <Typography sx={{ color: ds.text, wordBreak: 'keep-all' }}>{suggestion.explanation}</Typography>
+
+      {suggestion.original && (
+        <Box sx={{ mt: 1.5, p: 1.5, ...squircle(radius.inner), border: `1px solid ${ds.line}` }}>
+          <Typography sx={{ fontSize: 12, fontWeight: 700, color: ds.muted, mb: 0.5 }}>원래 문장</Typography>
+          <Typography sx={{ color: ds.ink, whiteSpace: 'pre-wrap', wordBreak: 'keep-all' }}>{suggestion.original}</Typography>
+        </Box>
+      )}
 
       {hasText && (
         <Box sx={{ mt: 1.5, p: 1.5, ...squircle(radius.inner), bgcolor: ds.primarySoft }}>

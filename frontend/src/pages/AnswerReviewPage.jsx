@@ -12,6 +12,10 @@ const ERROR_TEXT = {
   PRIVACY_RULES_INVALID: '개인정보 확인 규칙을 불러오지 못해 검토를 시작할 수 없어요. 잠시 후 다시 열어 주세요.',
   LOGIN_REQUIRED: '로그인이 필요해요. 다시 로그인해 주세요.',
   LLM_CALL_FAILED: 'AI 검토를 받지 못했어요. 잠시 후 다시 시도해 주세요.',
+  REVIEW_LIMIT_EXCEEDED: 'AI 검토는 한 작성 건에 5번까지 받을 수 있어요. 남은 제안을 보고 직접 다듬어 주세요.',
+  PII_REMAINING: '가리지 않은 개인정보가 남아 있어 AI 검토를 보내지 않았어요. 다시 검토 받기를 눌러 개인정보를 다시 골라 주세요.',
+  ANSWER_EMPTY: '비어 있는 답변이 있어요. 작성 화면에서 답변을 먼저 써 주세요.',
+  REVIEW_NOT_DONE: '아직 고르지 않은 제안이나 개인정보가 있어 검토를 마칠 수 없어요.',
   PRIVACY_UNDECIDED: '개인정보를 어떻게 할지 먼저 정해야 AI 검토를 받을 수 있어요.',
   NETWORK_ERROR: '서버 연결 실패. 잠시 후 다시 시도해 주세요.',
 }
@@ -24,17 +28,22 @@ const errorText = (code) => ERROR_TEXT[code] ?? '문제가 생겼어요. 다시 
 //   4번째를 가리킬 수 없고, 전체 단계 구성이 정해질 때까지 '○단계' 문구도 쓰지 않는다.
 // - 데이터 모양은 DATA-MODEL.md 를 따른다.
 //   answers:     [{ id(field_answer id), label(칸 제목), guide(안내 문구), value(사용자 답변) }]
-//   suggestions: [{ id, field_answer_id, kind(맞춤법·문법·질문 의도·보충), suggested_text, explanation, decision }]
+//   suggestions: [{ id, field_answer_id, kind(맞춤법·문법·질문 의도·보충), start, end, original, suggested_text, explanation, decision }]
+//     start·end 는 서버가 준 위치(R8), original 은 그 위치를 화면이 답변에서 잘라 붙인 것 (답변 전체 제안이면 null)
+// - reviewCount·reviewLimit: 작성 건마다 AI 검토를 받을 수 있는 횟수 (서버가 센다). 다 쓰면 검토 요청 버튼을 끈다
 // - reviewStatus: 'idle'(검토 요청 전) · 'checking'(개인정보 감지 중) · 'privacy'(개인정보 결정 기다림) · 'loading'(AI 검토 중) · 'done' · 'error'
 // - F-07(R7): 'AI 검토 받기'를 누르면 먼저 개인정보를 감지한다. 감지된 것이 있으면 PrivacyDecisionDialog 로
 //   사용자가 하나씩 정하고, 모두 정해야 AI 검토를 요청한다. 순서는 hooks/useAnswerReview.js 가 지킨다.
 //   detections: 결정이 끝난 감지 [{ id, field_answer_id, start, end, kind, decision }] — 답변 카드에 표시한다
 // - 제안은 자동으로 반영하지 않는다(R6). 사용자가 고른 반영·무시는 화면 상태로 들고 있다가
-//   onDecide 로 알린다(서버 저장은 API 연결 때). 미결정이 하나라도 남으면 '검토 마치기'를 막는다(R9).
+//   onDecide 로 알린다(서버에는 저장하지 않는다). 미결정이 하나라도 남으면 '검토 마치기'를 막는다(R9).
+//   onFinish 는 미결정 제안 수를 넘겨 부른다 (서버 :complete 는 숫자만 받는다)
 export default function AnswerReviewPage({
   answers = [],
   suggestions = [],
   reviewStatus = 'idle',
+  reviewCount = 0,
+  reviewLimit = null,
   errorCode = null,
   detections = [],
   pendingDetections = [],
@@ -65,7 +74,8 @@ export default function AnswerReviewPage({
   const emptyAnswers = answers.filter((a) => !a.value?.trim())
   // 서술형 답변을 비워 두면 검토를 거절한다 (US-05 인수 조건)
   const busy = ['checking', 'privacy', 'loading'].includes(reviewStatus)
-  const canRequest = Boolean(onRequestReview) && answers.length > 0 && emptyAnswers.length === 0 && !busy
+  const remaining = reviewLimit == null ? null : Math.max(reviewLimit - reviewCount, 0)
+  const canRequest = Boolean(onRequestReview) && answers.length > 0 && emptyAnswers.length === 0 && !busy && remaining !== 0
   const canFinish = reviewed && pendingCount === 0 && Boolean(onFinish)
 
   const decide = (id, decision) => {
@@ -121,8 +131,10 @@ export default function AnswerReviewPage({
               pendingCount={pendingCount}
               canRequest={canRequest}
               canFinish={canFinish}
+              remaining={remaining}
+              reviewLimit={reviewLimit}
               onRequest={requestReview}
-              onFinish={onFinish}
+              onFinish={() => onFinish?.(pendingCount)}
               onBack={onBack}
             />
           </Stack>
@@ -145,7 +157,7 @@ export default function AnswerReviewPage({
 }
 
 // 오른쪽(모바일은 아래) 요약: 검토 요청 → 남은 결정 수 → 검토 마치기
-function ReviewPanel({ reviewStatus, answerCount, emptyCount, suggestionCount, pendingCount, canRequest, canFinish, onRequest, onFinish, onBack }) {
+function ReviewPanel({ reviewStatus, answerCount, emptyCount, suggestionCount, pendingCount, canRequest, canFinish, remaining, reviewLimit, onRequest, onFinish, onBack }) {
   const loading = reviewStatus === 'loading' || reviewStatus === 'checking'
   const reviewed = reviewStatus === 'done'
 
@@ -198,6 +210,14 @@ function ReviewPanel({ reviewStatus, answerCount, emptyCount, suggestionCount, p
         {!reviewed && !loading && (
           <Typography sx={{ fontSize: 13, color: ds.text2 }}>
             AI에 보내기 전에 답변에 개인정보가 있는지 먼저 확인해요. 어떻게 할지는 직접 골라요.
+          </Typography>
+        )}
+        {remaining != null && (
+          // 작성 건마다 AI 검토 횟수가 정해져 있다 (서버가 센다)
+          <Typography sx={{ fontSize: 13, color: remaining === 0 ? ds.red : ds.text2 }} aria-live="polite">
+            {remaining === 0
+              ? `AI 검토를 ${reviewLimit}번 모두 받았어요. 더 받을 수 없어요.`
+              : `AI 검토는 ${reviewLimit}번까지 받을 수 있어요. ${remaining}번 남았어요.`}
           </Typography>
         )}
 

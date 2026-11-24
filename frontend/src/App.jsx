@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Box, Button, CircularProgress, Typography } from '@mui/material'
 import { USE_MOCK } from './api/client.js'
-import { finishReview } from './api/review.js'
 import { startWriting } from './api/priorInfo.js'
 import { AuthProvider } from './auth/AuthContext.jsx'
 import { LOGIN_ERROR_MESSAGES } from './auth/loginErrors.js'
@@ -80,21 +79,25 @@ function AppContent() {
       {/* F-03 API 명세가 아직 없어 저장된 사전 정보·저장 동작을 연결하지 않았다.
           명세가 나오면 여기서 savedInfo·status·serverErrors·onSave·onStartWriting 을 넘기고,
           작성 건 모드의 requiredKeys 는 이 작성 건 fields 의 prior_info_key 목록으로 바꾼다. */}
-      {/* 사전 정보·답변 검토는 서버 API가 아직 없어 목(VITE_USE_MOCK=true)에서만 연다 */}
+      {/* 사전 정보는 서버 API가 아직 없어 목(VITE_USE_MOCK=true)에서만 연다 */}
       {USE_MOCK && route.name === 'prior-info' && status === 'authenticated' && (
         <PriorInfoRoute key={route.params.draftId ?? 'manage'} draftId={route.params.draftId} language={user?.language} />
       )}
-      {USE_MOCK && route.name === 'review' && status === 'authenticated' && (
-        <AnswerReviewRoute key={route.params.draftId} draftId={route.params.draftId} />
-      )}
-      {USE_MOCK && (route.name === 'prior-info' || route.name === 'review') && status === 'anonymous' && (
+      {USE_MOCK && route.name === 'prior-info' && status === 'anonymous' && (
         <Container sx={{ py: 6 }}>
           <LoginRequired />
         </Container>
       )}
       {/* 실서버 모드에서 북마크·뒤로 가기로 이 경로에 들어와도 빈 화면이 아니라 준비 중 안내를 보여 준다 */}
-      {!USE_MOCK && (route.name === 'prior-info' || route.name === 'review') && (
-        <ComingSoon title={route.name === 'prior-info' ? '사전 정보 입력 화면은 준비 중이에요' : '답변 검토 화면은 준비 중이에요'} />
+      {!USE_MOCK && route.name === 'prior-info' && <ComingSoon title="사전 정보 입력 화면은 준비 중이에요" />}
+      {/* F-06 답변 검토 + F-07 개인정보 감지. 목·실서버 모두 연다 (api/review.js) */}
+      {route.name === 'review' && status === 'authenticated' && (
+        <AnswerReviewRoute key={route.params.draftId} draftId={route.params.draftId} />
+      )}
+      {route.name === 'review' && status === 'anonymous' && (
+        <Container sx={{ py: 6 }}>
+          <LoginRequired />
+        </Container>
       )}
     </Layout>
   )
@@ -126,7 +129,7 @@ function PriorInfoRoute({ draftId, language }) {
   )
 }
 
-// F-06 서술형 답변 검토 + F-07 개인정보 감지. 검토는 api/review.js(목 전용), 감지 규칙은 api/privacy.js(GET /api/privacy-rules)를 거친다.
+// F-06 서술형 답변 검토 + F-07 개인정보 감지. 검토는 api/review.js([제안] 경로), 감지 규칙은 api/privacy.js(GET /api/privacy-rules)를 거친다.
 function AnswerReviewRoute({ draftId }) {
   const review = useAnswerReview(draftId)
   const { busy, error, run, clearError } = useSingleFlight()
@@ -138,6 +141,8 @@ function AnswerReviewRoute({ draftId }) {
         answers={review.answers}
         suggestions={review.suggestions}
         reviewStatus={review.reviewStatus}
+        reviewCount={review.reviewCount}
+        reviewLimit={review.reviewLimit}
         errorCode={review.errorCode}
         detections={review.detections}
         pendingDetections={review.pendingDetections}
@@ -145,9 +150,8 @@ function AnswerReviewRoute({ draftId }) {
         onRequestReview={review.request}
         onConfirmPrivacy={review.confirmPrivacy}
         onCancelPrivacy={review.cancelPrivacy}
-        onDecide={review.decide}
         // 요청 중에는 undefined 를 넘겨 '검토 마치기' 버튼을 끈다(AnswerReviewPage 의 canFinish)
-        onFinish={busy ? undefined : () => run(() => finishReview(draftId).then(() => navigate('/drafts')))}
+        onFinish={busy ? undefined : (undecidedSuggestions) => run(() => review.finish(undecidedSuggestions).then(() => navigate('/drafts')))}
         onBack={() => navigate('/drafts')}
       />
     </>

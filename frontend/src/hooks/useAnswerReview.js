@@ -4,12 +4,39 @@
 //     흐름: AI 검토 받기 → 브라우저 감지(서버 규칙) → (결정할 것이 있으면) 모달 → 결정 반영 → requestReview
 // F-07 감지·결정은 브라우저에서만 한다. 서버에는 규칙만 받아 오고(GET /api/privacy-rules), 감지 결과·결정은 보내지 않는다
 // (REVIEW-PRIVACY-API.md "F-07은 브라우저에서 한다").
+// F-06 검토(api/review.js [제안]):
+// - 답변은 검토를 요청할 때 본문으로 보낸다. '검토 제외'로 고른 부분은 같은 길이의 '*'로 가린다 (maskForReview)
+// - 서버는 제안 위치(start·end)만 준다(R8). 고칠 원문(original)은 보낸 답변에서 잘라 붙인다
+// - 작성 건마다 review_limit(5)번까지 받을 수 있다. 남은 횟수는 서버가 준 review_count 로 센다
+// - 제안 반영 여부는 서버에 저장하지 않는다. 화면(AnswerReviewPage)이 들고 있다가 검토 마치기 때 미결정 수만 보낸다
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getPrivacyRules } from '../api/privacy.js'
-import { decideSuggestion, getReview, requestReview } from '../api/review.js'
+import { finishReview, getReview, requestReview } from '../api/review.js'
 import { applyDecisions, compileRules, detectInAnswers } from '../utils/privacyDetect.js'
 
 const undecided = (detections) => detections.filter((d) => !d.decision)
+
+/** '검토 제외'로 고른 부분을 같은 길이의 '*'로 가린 답변 [{ id, value }]. 길이가 같아야 서버가 준 위치가 그대로 맞는다 */
+export function maskForReview(answers, detections) {
+  return answers.map((answer) => {
+    let value = answer.value ?? ''
+    for (const d of detections) {
+      if (d.field_answer_id !== answer.id || d.decision !== '검토 제외') continue
+      value = value.slice(0, d.start) + '*'.repeat(d.end - d.start) + value.slice(d.end)
+    }
+    return { id: answer.id, value }
+  })
+}
+
+/** 서버 제안(위치만 있음)에 화면에서 보여 줄 원문을 붙인다. 위치가 없으면(답변 전체 제안) original 은 null */
+function withOriginal(suggestions, answers) {
+  const byId = new Map(answers.map((a) => [a.id, a.value ?? '']))
+  return suggestions.map((s) => ({
+    ...s,
+    original: s.start == null || s.end == null ? null : (byId.get(s.field_answer_id) ?? '').slice(s.start, s.end),
+    decision: '미결정',
+  }))
+}
 
 export function useAnswerReview(draftId) {
   const [answers, setAnswers] = useState([])
@@ -19,6 +46,9 @@ export function useAnswerReview(draftId) {
   const [errorCode, setErrorCode] = useState(null)
   const [privacyError, setPrivacyError] = useState(null)
   const [loaded, setLoaded] = useState(false)
+  // 검토 횟수 (서버 draft.review_count). 다 쓰면 더 요청하지 않는다
+  const [reviewCount, setReviewCount] = useState(0)
+  const [reviewLimit, setReviewLimit] = useState(null)
   // 컴파일한 감지 규칙. 화면을 열 때 한 번 받는다 (REVIEW-PRIVACY-API.md 항목 4 '화면이 쓰는 곳')
   const rules = useRef(null)
   // 모달을 닫으면 검토 요청 전 상태(처음이면 idle, 이미 검토했으면 done)로 돌아간다
@@ -32,6 +62,8 @@ export function useAnswerReview(draftId) {
         if (!alive) return
         rules.current = compileRules(privacy.rules)
         setAnswers(data.answers)
+        setReviewCount(data.review_count ?? 0)
+        setReviewLimit(data.review_limit ?? null)
         setLoaded(true)
       })
       .catch((e) => {
@@ -46,17 +78,26 @@ export function useAnswerReview(draftId) {
   }, [draftId])
 
   // L3 검토. 이 함수는 결정 전 개인정보가 없을 때만 불린다 (아래 request·confirmPrivacy)
-  const runReview = useCallback(async () => {
-    setReviewStatus('loading')
-    try {
-      const data = await requestReview(draftId)
-      setSuggestions(data.suggestions)
-      setReviewStatus('done')
-    } catch (e) {
-      setErrorCode(e.code ?? null)
-      setReviewStatus('error')
-    }
-  }, [draftId])
+  // 상태 갱신 전에 불리므로 보낼 답변·감지를 인자로 받는다
+  const runReview = useCallback(
+    async (currentAnswers, currentDetections) => {
+      setReviewStatus('loading')
+      const sent = maskForReview(currentAnswers, currentDetections)
+      try {
+        const data = await requestReview(draftId, sent)
+        // 원문은 가리기 전 답변에서 자른다. 가린 부분과 길이가 같아서 위치가 그대로 맞는다
+        setSuggestions(withOriginal(data.suggestions, currentAnswers))
+        if (data.review_count != null) setReviewCount(data.review_count)
+        if (data.review_limit != null) setReviewLimit(data.review_limit)
+        setReviewStatus('done')
+      } catch (e) {
+        if (e.code === 'REVIEW_LIMIT_EXCEEDED') setReviewCount((n) => Math.max(n, reviewLimit ?? n))
+        setErrorCode(e.code ?? null)
+        setReviewStatus('error')
+      }
+    },
+    [draftId, reviewLimit],
+  )
 
   const request = useCallback(async () => {
     setReviewStatus((prev) => {
@@ -72,7 +113,7 @@ export function useAnswerReview(draftId) {
       setReviewStatus('privacy')
       return
     }
-    await runReview()
+    await runReview(answers, found)
   }, [answers, detections, runReview])
 
   // decisions: [{ id, decision }] — 모달에서 고른 결정 전부. '삭제'는 화면의 답변에서 지운다 (서버에는 보내지 않는다)
@@ -87,7 +128,7 @@ export function useAnswerReview(draftId) {
       }
       setAnswers(next.answers)
       setDetections(next.detections)
-      await runReview()
+      await runReview(next.answers, next.detections)
     },
     [answers, detections, runReview],
   )
@@ -97,8 +138,18 @@ export function useAnswerReview(draftId) {
     setReviewStatus(statusBeforeRequest.current)
   }, [])
 
-  // 화면이 고른 결정은 화면이 들고 있고, 여기서는 서버 저장만 한다. 저장 실패 처리는 API 명세가 나온 뒤에 정한다.
-  const decide = useCallback((suggestionId, decision) => decideSuggestion(draftId, suggestionId, decision).catch(() => {}), [draftId])
+  // 검토 마치기 (검토완료 → 작성완료). 미결정 제안 수는 화면이 센 값을 받는다.
+  // 필수 칸·불일치 수는 가상 작성 화면의 값이라 여기서는 알 수 없다. 가상 작성 입력값을 브라우저에서 읽게 되면 그 값으로 바꾼다
+  const finish = useCallback(
+    (undecidedSuggestions = 0) =>
+      finishReview(draftId, {
+        remaining_required: 0,
+        unacknowledged_mismatches: 0,
+        undecided_suggestions: undecidedSuggestions,
+        undecided_privacy: undecided(detections).length,
+      }),
+    [draftId, detections],
+  )
 
   return {
     loaded,
@@ -107,11 +158,13 @@ export function useAnswerReview(draftId) {
     detections,
     pendingDetections: undecided(detections),
     reviewStatus,
+    reviewCount,
+    reviewLimit,
     errorCode,
     privacyError,
     request,
     confirmPrivacy,
     cancelPrivacy,
-    decide,
+    finish,
   }
 }
