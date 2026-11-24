@@ -53,8 +53,11 @@ function AppContent() {
       )}
       {route.name === 'landing' && <LandingPage />}
       {/* 업로드는 로그인이 필요하다. 별도 로그인 화면 없이 LoginRequired 블록을 재사용한다. */}
-      {route.name === 'upload' && status === 'authenticated' && <UploadPage />}
-      {route.name === 'upload' && status === 'anonymous' && (
+      {route.name === 'upload' && status === 'authenticated' && <UploadPage key="new" />}
+      {route.name === 'reupload' && status === 'authenticated' && (
+        <UploadPage key={`reupload-${route.params.draftId}`} replaceDraftId={route.params.draftId} />
+      )}
+      {(route.name === 'upload' || route.name === 'reupload') && status === 'anonymous' && (
         <Container sx={{ py: 6 }}>
           <LoginRequired message="로그인한 뒤 문서를 올릴 수 있어요." />
         </Container>

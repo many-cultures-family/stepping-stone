@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Box, Button, ButtonBase, CircularProgress, Stack, Typography } from '@mui/material'
-import { recognizeDocument, uploadDocument } from '../api/documents.js'
+import { recognizeDocument, reuploadDocument, REUPLOAD_AVAILABLE, uploadDocument } from '../api/documents.js'
 import { useAuth } from '../auth/useAuth.js'
 import { AlertCircleIcon, CheckCircleIcon, DocumentIcon, ShieldIcon, UploadIcon } from '../components/icons.jsx'
 import PageHero from '../components/PageHero.jsx'
@@ -12,6 +12,8 @@ import { REJECT_HINT, rejectText } from '../utils/rejectReason.js'
 // US-01: PDF·이미지 파일을 올리면 작성 건이 '업로드됨'으로 생기고(#1), 이어서 글자 인식·개인정보 가림(#2·#3·#4,
 // OCR-API.md 항목 1)을 부른다. 인식이 끝나면 입력 항목 확인(F-02, /drafts/:id/fields)으로 이어진다.
 // 인식에 실패하면 서버가 작성 건을 '반려'로 바꾸고 사유 코드를 돌려준다 → 사유 문구와 다시 올리기 안내.
+// 다시 올리기(/drafts/:id/reupload, replaceDraftId)는 새 작성 건을 만들지 않고 반려된 같은 건의 문서를 바꾼다
+// (DATA-MODEL.md "작성 건 하나에 문서 하나", 서버 POST .../document:reupload 백엔드 PR #38).
 const ALLOWED_TYPES = ['application/pdf', 'image/png', 'image/jpeg']
 const ALLOWED_TYPES_LABEL = 'PDF, PNG, JPG'
 
@@ -20,7 +22,14 @@ const ERROR_MESSAGES = {
   FILE_REQUIRED: '파일을 선택해 주세요.',
   FILE_TYPE_NOT_ALLOWED: `${ALLOWED_TYPES_LABEL} 파일만 올릴 수 있어요. 다른 파일을 선택해 주세요.`,
   NETWORK_ERROR: '서버 연결 실패. 잠시 후 다시 시도해 주세요.',
+  // 다시 올리기에서만 나는 오류
+  DRAFT_NOT_REJECTED: '반려된 작성 건에만 다시 올릴 수 있어요. 내 작성 목록에서 이어서 진행해 주세요.',
+  DRAFT_NOT_FOUND: '작성 건을 찾을 수 없어요. 이미 지워졌을 수 있어요.',
+  FORBIDDEN_DRAFT: '이 작성 건에 올릴 수 있는 권한이 없어요.',
 }
+
+// 다시 올리기에서 같은 건에 다시 시도해도 소용없는 오류 → 새로 올리기로 안내한다
+const REUPLOAD_FINAL_ERRORS = ['DRAFT_NOT_REJECTED', 'DRAFT_NOT_FOUND', 'FORBIDDEN_DRAFT']
 
 function errorMessage(e) {
   return ERROR_MESSAGES[e.code] ?? '파일을 올리는 중 문제가 생겼어요. 다시 시도해 주세요.'
@@ -46,8 +55,17 @@ const TIPS = [
   { title: '빈 신청서도 OK', body: '아직 아무것도 쓰지 않은 신청서를 올려도 돼요.' },
 ]
 
-export default function UploadPage() {
+export default function UploadPage({ replaceDraftId = null }) {
   const { setLoggedOut } = useAuth()
+  // 문서를 바꿀 반려 건 id. 이 화면에서 다시 반려되면 그 건으로 바뀐다 (새로 올린 건이 반려된 경우 포함)
+  const [replaceId, setReplaceId] = useState(REUPLOAD_AVAILABLE ? replaceDraftId : null)
+  // 이 작성 건에는 더 올릴 수 없다고 서버가 답했을 때(반려 아님·없음·권한 없음). '다시 시도'로 새 건이 생기지 않게 막는다
+  const [reuploadBlocked, setReuploadBlocked] = useState(false)
+
+  // 다시 올리기 API 가 없는 실서버에서 /drafts/:id/reupload 로 들어오면 새 작성 건 올리기 주소로 바꾼다 (북마크·공유 주소)
+  useEffect(() => {
+    if (replaceDraftId && !REUPLOAD_AVAILABLE) navigate('/upload', { replace: true })
+  }, [replaceDraftId])
   const [file, setFile] = useState(null)
   const [dragging, setDragging] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -57,6 +75,7 @@ export default function UploadPage() {
   const [recognizeError, setRecognizeError] = useState(null) // { message, retryable }
 
   function pick(next) {
+    if (reuploadBlocked) return
     setError(null)
     setFile(next ?? null)
   }
@@ -83,7 +102,7 @@ export default function UploadPage() {
     setLoading(true)
     setError(null)
     try {
-      const { draft: created } = await uploadDocument(file)
+      const { draft: created } = replaceId ? await reuploadDocument(replaceId, file) : await uploadDocument(file)
       setDraft(created)
       // 업로드 성공 직후 이어서 인식한다 (OCR-API.md "화면은 업로드 성공 직후 이어서 부른다")
       await runRecognize(created.id)
@@ -95,6 +114,8 @@ export default function UploadPage() {
         return
       }
       setError(errorMessage(e))
+      // 이 건에는 더 올릴 수 없다 → 같은 건에 다시 시도하지 않고 목록·새로 올리기만 권한다
+      if (replaceId && REUPLOAD_FINAL_ERRORS.includes(e.code)) setReuploadBlocked(true)
     } finally {
       setLoading(false)
     }
@@ -114,14 +135,32 @@ export default function UploadPage() {
     setError(null)
     setDraft(null)
     setRecognizeError(null)
+    setReplaceId(null)
+    setReuploadBlocked(false)
+    // 다시 올리기 경로에서 '다른 파일 올리기'를 누르면 새 작성 건 올리기 경로로 바꾼다
+    if (window.location.pathname !== '/upload') navigate('/upload')
   }
 
+  // 반려된 건에 다른 파일로 다시 올리기 (같은 작성 건 유지)
+  function handleReupload() {
+    const id = draft.id
+    setFile(null)
+    setError(null)
+    setDraft(null)
+    setRecognizeError(null)
+    setReplaceId(id)
+  }
+
+  const canReupload = REUPLOAD_AVAILABLE && rejected
+
   const hero = !draft
-    ? { title: '신청서를 올려 주세요', description: `${ALLOWED_TYPES_LABEL} 파일을 올리면 AI가 써야 할 칸을 찾아 드려요.` }
+    ? replaceId
+      ? { title: '다른 파일로 다시 올려 주세요', description: `반려된 작성 건 #${replaceId}에 새 파일을 올리면 같은 작성 건에서 이어서 진행해요.` }
+      : { title: '신청서를 올려 주세요', description: `${ALLOWED_TYPES_LABEL} 파일을 올리면 AI가 써야 할 칸을 찾아 드려요.` }
     : recognizing
       ? { title: '글자를 읽고 있어요', description: '이름·연락처 같은 개인정보는 가린 뒤에만 AI에 보내요. 잠시만 기다려 주세요.' }
       : rejected
-        ? { title: '문서를 처리하지 못했어요', description: '아래 안내를 보고 다른 파일로 다시 올려 주세요.' }
+        ? { title: '문서를 처리하지 못했어요', description: canReupload ? '아래 안내를 보고 다른 파일로 다시 올려 주세요. 같은 작성 건에서 이어서 할 수 있어요.' : '아래 안내를 보고 다른 파일로 다시 올려 주세요.' }
         : readyForFields
           ? { title: '문서를 올렸어요', description: '이제 AI가 찾은 입력 칸이 원본과 같은지 확인할 차례예요.' }
           : { title: '글자 인식을 마치지 못했어요', description: '다시 시도하거나, 내 작성 목록에서 이어서 할 수 있어요.' }
@@ -201,6 +240,15 @@ export default function UploadPage() {
                         다시 인식하기
                       </Button>
                     </>
+                  ) : canReupload ? (
+                    <>
+                      <Button variant="outlined" size="large" onClick={() => navigate('/drafts')}>
+                        내 작성 목록 보기
+                      </Button>
+                      <Button variant="contained" size="large" onClick={handleReupload}>
+                        다른 파일로 다시 올리기
+                      </Button>
+                    </>
                   ) : (
                     <>
                       <Button variant="outlined" size="large" onClick={() => navigate('/drafts')}>
@@ -270,17 +318,28 @@ export default function UploadPage() {
                 </Box>
               )}
 
-              <Stack direction="row" sx={{ justifyContent: 'flex-end' }}>
-                <Button
-                  variant="contained"
-                  size="large"
-                  disabled={!file || loading}
-                  onClick={handleSubmit}
-                  sx={{ minWidth: { xs: '100%', sm: 200 } }}
-                >
-                  {loading ? <CircularProgress size={22} thickness={5} sx={{ color: 'white' }} /> : error ? '다시 시도' : '올리기'}
-                </Button>
-              </Stack>
+              {reuploadBlocked ? (
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ justifyContent: 'flex-end' }}>
+                  <Button variant="outlined" size="large" onClick={() => navigate('/drafts')}>
+                    내 작성 목록 보기
+                  </Button>
+                  <Button variant="contained" size="large" onClick={handleReset}>
+                    새로 올리기
+                  </Button>
+                </Stack>
+              ) : (
+                <Stack direction="row" sx={{ justifyContent: 'flex-end' }}>
+                  <Button
+                    variant="contained"
+                    size="large"
+                    disabled={!file || loading}
+                    onClick={handleSubmit}
+                    sx={{ minWidth: { xs: '100%', sm: 200 } }}
+                  >
+                    {loading ? <CircularProgress size={22} thickness={5} sx={{ color: 'white' }} /> : error ? '다시 시도' : replaceId ? '다시 올리기' : '올리기'}
+                  </Button>
+                </Stack>
+              )}
             </Stack>
           )}
 
