@@ -1,6 +1,6 @@
 // 사전 정보 API (F-03, US-04).
 // 사전 정보는 서버에 저장하지 않는다(docs/decisions/no-server-storage-user-input.md). 그래서 서버를 부르지 않고
-// 이 브라우저(utils/browserStore.js, [제안] localStorage·사용자별)에 둔다.
+// 이 브라우저(utils/browserStore.js, localStorage·사용자별, data-flow.md 5절 #3)에 둔다.
 // 화면 코드는 이 함수만 쓴다. 보관 위치가 바뀌어도 화면은 그대로다.
 import * as store from '../utils/browserStore.js'
 import { startWriting as startWritingApi } from './writing.js'
