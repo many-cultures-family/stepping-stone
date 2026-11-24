@@ -7,6 +7,7 @@ import ExplainableText from '../components/explain/ExplainableText.jsx'
 import { AlertCircleIcon, CheckCircleIcon, PenIcon, ShieldIcon } from '../components/icons.jsx'
 import PageHero from '../components/PageHero.jsx'
 import DiffLine from '../components/virtual-form/DiffLine.jsx'
+import DocumentTextPanel from '../components/explain/DocumentTextPanel.jsx'
 import { Container, Pill } from '../components/ui.jsx'
 import { navigate } from '../router.js'
 import { ds, radius, squircle } from '../theme.js'
@@ -261,6 +262,9 @@ export default function WritingPage({ draftId }) {
                 </Button>
               </Stack>
             </Box>
+
+            {/* F-05 단어·문장 설명: 가린 문서 글자에서 낱말을 골라 뜻을 본다 */}
+            <DocumentTextPanel draftId={draftId} />
 
             <Stack direction="row" spacing={1.5} sx={{ ...squircle(radius.card), bgcolor: ds.primarySoft, p: 2.5, alignItems: 'flex-start' }}>
               <Box sx={{ color: ds.primary, pt: 0.25 }}>
