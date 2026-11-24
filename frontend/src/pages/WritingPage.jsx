@@ -72,6 +72,12 @@ export default function WritingPage({ draftId }) {
         if (saved) {
           initial = pick(saved.values)
           setAcks(pick(saved.acks))
+          // 쓰던 중 사전 정보 화면에서 새로 저장하고 돌아왔을 수 있다 → 아직 빈 사전 정보 칸만 채운다
+          for (const f of form.fields) {
+            if (f.prior_info_key && prior?.[f.prior_info_key] && !initial[f.field_id]?.trim()) {
+              initial[f.field_id] = prior[f.prior_info_key]
+            }
+          }
         } else {
           // 처음 열면 사전 정보가 있는 칸을 미리 채운다
           initial = {}
@@ -693,6 +699,17 @@ function FieldHelp({ field, value, error, mismatch, priorValue, onUseSaved, onKe
         </Stack>
       )}
       {mismatch && <MismatchNote state={mismatch} prior={priorValue} current={value ?? ''} onUseSaved={onUseSaved} onKeep={onKeep} />}
+      {/* 사전 정보와 연결된 칸인데 이 브라우저에 그 값이 없을 때: 돌려보내지 않고 여기서 바로 쓰게 두고, 저장 방법만 알린다 */}
+      {field.prior_info_key && !priorValue && !signature && (
+        <Box sx={{ mt: 1.5, p: 1.5, borderRadius: 1, bgcolor: ds.card }}>
+          <Typography variant="body2" sx={{ wordBreak: 'keep-all' }}>
+            저장된 사전 정보가 없어요. 이 칸에 바로 써도 되고, 사전 정보에 저장해 두면 다음부터 미리 채워 드려요.
+          </Typography>
+          <Button size="small" onClick={() => navigate('/prior-info')} sx={{ mt: 0.5, px: 0 }}>
+            사전 정보 저장하러 가기
+          </Button>
+        </Box>
+      )}
     </Box>
   )
 }
