@@ -1,4 +1,4 @@
-# L1 입력 항목 추론 (03-rules-states-llm.md 3-4 L1). Gemini 호출은 서버 코드 중 이 파일에서만 한다
+# L1 입력 항목 추론·L2 쉬운 풀이 (03-rules-states-llm.md 3-4 L1·L2). Gemini 호출은 서버 코드 중 이 파일에서만 한다
 # (CLAUDE.md "LLM은 FastAPI 서버에서만 호출한다"). 모델명은 .env(GEMINI_MODEL)에서만 읽는다.
 import json
 import os
@@ -192,7 +192,8 @@ def _build_prompt(masked_text, language, existing_fields, flagged_field_ids):
     return "\n\n".join(parts)
 
 
-def _call_gemini(prompt):
+def _call_gemini(prompt, schema=None):
+    # schema: 응답 형식. 없으면 L1 항목 목록 형식(RESPONSE_SCHEMA)
     api_key = os.environ.get("GEMINI_API_KEY")
     model = os.environ.get("GEMINI_MODEL")
     if not api_key or not model:
@@ -204,7 +205,7 @@ def _call_gemini(prompt):
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
                 "responseMimeType": "application/json",
-                "responseSchema": RESPONSE_SCHEMA,
+                "responseSchema": schema or RESPONSE_SCHEMA,
             },
         }
     ).encode("utf-8")
@@ -221,3 +222,58 @@ def _call_gemini(prompt):
         return payload["candidates"][0]["content"]["parts"][0]["text"]
     except (KeyError, IndexError, TypeError) as exc:
         raise LLMCallError(f"Gemini 응답 형식이 다름: {exc}") from exc
+
+
+# ── L2 쉬운 풀이 (03-rules-states-llm.md 3-4 L2, WORD-EXPLAIN-API.md 항목 2) ──
+
+EXPLAIN_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {"explanation": {"type": "STRING"}},
+    "required": ["explanation"],
+}
+
+# 설명 언어 이름. MVP는 vi 하나 (VIETNAMESE-SCOPE.md), 구조는 user.language를 그대로 받는다
+LANGUAGE_NAMES = {"vi": "베트남어(Tiếng Việt)", "ko": "쉬운 한국어"}
+
+
+def explain_text(selected_text, language, glossary_explanation=None):
+    """L2를 호출해 신청서 속 단어·문장의 쉬운 풀이를 만든다.
+
+    보내는 것: selected_text(가린 문서 글자 안에 있는 것만, 호출부가 확인), 용어 사전 기본 설명(있으면), language.
+    보내지 않는 것: 사용자가 입력한 값, 사전 정보, 문서 전체 (03 3-4 L2).
+    반환: 풀이 문자열 (비어 있으면 LLMCallError)
+    """
+    response_text = _call_gemini(
+        _build_explain_prompt(selected_text, language, glossary_explanation),
+        schema=EXPLAIN_SCHEMA,
+    )
+    try:
+        data = json.loads(response_text)
+    except ValueError as exc:
+        raise LLMCallError(f"L2 응답이 JSON이 아님: {exc}") from exc
+    explanation = data.get("explanation") if isinstance(data, dict) else None
+    if not isinstance(explanation, str) or not explanation.strip():
+        raise LLMCallError("L2 응답에 explanation이 없음")
+    return explanation.strip()
+
+
+def _build_explain_prompt(selected_text, language, glossary_explanation):
+    language_name = LANGUAGE_NAMES.get(language, language)
+    parts = [
+        "너는 한국 행정 서류(신청서·동의서)를 처음 보는 결혼이주여성을 돕는다.",
+        f"아래 '고른 글자'는 한국어 신청서에 적힌 단어나 문장이다. {language_name}로 쉽게 풀어 설명한다.",
+        "규칙:",
+        f"- 설명은 반드시 {language_name}로만 쓴다. 한국어 낱말은 신청서에 적힌 말을 가리킬 때만 따옴표로 쓴다.",
+        "- 짧은 문장 2~4개로 쓴다. 어려운 법률 용어를 쓰지 않는다.",
+        "- 이 말이 신청서에서 무엇을 뜻하는지, 사용자가 무엇을 하면 되는지를 쓴다.",
+        "- 짧은 예시를 한 개 붙인다.",
+        "- 대괄호 토큰([이름], [전화번호] 등)은 가린 개인정보다. 값을 짐작하지 않고 예시에도 쓰지 않는다.",
+        "- 모르는 내용은 지어내지 말고 '신청하는 기관에 확인하세요'라고 쓴다.",
+        '- 응답은 JSON {"explanation": "..."} 하나로만 한다.',
+        f"고른 글자: {selected_text}",
+    ]
+    if glossary_explanation:
+        parts.append(
+            f"용어 사전 기본 설명(사용자가 이것으로 이해하지 못했다): {glossary_explanation}"
+        )
+    return "\n".join(parts)
