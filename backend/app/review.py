@@ -1,4 +1,4 @@
-"""F-06 서술형 답변 검토 — 서버 API (REVIEW-PRIVACY-API.md 항목 1·2·3, US-05).
+"""F-06 서술형 답변 검토 — 서버 API (REVIEW-PRIVACY-API.md 항목 1·2·3·5, US-05).
 
 서술형 답변·감지 결과·검토 제안은 서버에 저장하지 않는다 (no-server-storage-user-input.md).
 서버는 이미 있는 것(form_field, draft, user.language)만 읽는다. 요청·응답 본문은 로그에 남기지 않는다.
@@ -253,3 +253,85 @@ def _mark_reviewed(draft_id, count):
                 )
     finally:
         conn.close()
+
+
+# 항목 5 입력: 브라우저가 R9 조건 4개를 센 숫자만 받는다 (값은 받지 않는다)
+COMPLETE_COUNTS = (
+    "remaining_required",
+    "unacknowledged_mismatches",
+    "undecided_suggestions",
+    "undecided_privacy",
+)
+
+
+async def _read_counts(request):
+    try:
+        body = await request.json()
+    except ValueError:
+        body = None
+    if not isinstance(body, dict):
+        raise HTTPException(
+            status_code=400, detail={"code": "INVALID_COMPLETE_REQUEST"}
+        )
+    counts = [body.get(key) for key in COMPLETE_COUNTS]
+    if not all(
+        isinstance(c, int) and not isinstance(c, bool) and c >= 0 for c in counts
+    ):
+        raise HTTPException(
+            status_code=400, detail={"code": "INVALID_COMPLETE_REQUEST"}
+        )
+    return counts
+
+
+@router.post("/drafts/{draft_id}:complete")
+async def complete_draft(
+    draft_id: int,
+    request: Request,
+    user: Annotated[dict, Depends(auth.current_user)],
+):
+    """항목 5. review → 성공 / 반려 (R9 "사용자가 완성본을 최종 확인").
+
+    검토 절차(항목 3 통과, reviewed_at)가 없으면 상태를 바꾸지 않고 409 REVIEW_NOT_DONE.
+    숫자 4개가 모두 0이고 입력 항목이 확정돼 있으면 성공, 아니면 반려(CONDITION_UNMET). 단계는 review 그대로.
+    서버는 브라우저가 보낸 숫자가 맞는지 확인할 수 없다 (서버 미저장 결정, 명세 "서버가 못 막는 것").
+    """
+    conn = db.connect()
+    try:
+        draft = load_draft(conn, draft_id, user, "review")
+        if not draft["reviewed_at"]:
+            raise HTTPException(status_code=409, detail={"code": "REVIEW_NOT_DONE"})
+        counts = await _read_counts(request)
+        passed = all(c == 0 for c in counts) and bool(draft["fields_confirmed_at"])
+        # 동시 호출: 조건이 있는 UPDATE 하나로 확인과 반영을 한 번에 한다 (drafts.py 제출·취소와 같은 방식)
+        with conn:
+            if passed:
+                updated = conn.execute(
+                    "UPDATE draft SET status = '성공', reject_reason = NULL "
+                    "WHERE id = ? AND status = '수정' AND step = 'review' "
+                    "AND reviewed_at IS NOT NULL",
+                    (draft_id,),
+                )
+            else:
+                updated = conn.execute(
+                    "UPDATE draft SET status = '반려', reject_reason = 'CONDITION_UNMET' "
+                    "WHERE id = ? AND status = '수정' AND step = 'review' "
+                    "AND reviewed_at IS NOT NULL",
+                    (draft_id,),
+                )
+            if updated.rowcount == 0:
+                raise HTTPException(
+                    status_code=409, detail={"code": "DRAFT_NOT_EDITABLE"}
+                )
+    finally:
+        conn.close()
+    logger.info("최종 확인 (draft %s): %s", draft_id, "성공" if passed else "반려")
+    if passed:
+        return {"draft": {"id": draft_id, "status": "성공", "step": "review"}}
+    return {
+        "draft": {
+            "id": draft_id,
+            "status": "반려",
+            "step": "review",
+            "reject_reason": "CONDITION_UNMET",
+        }
+    }
