@@ -60,6 +60,21 @@ export async function submitDraft(draftId) {
   return { id: d.id, status: d.status, submitted_at: d.submitted_at }
 }
 
+// 되돌리기 (api/drafts.js revertDraft [제안]). 제안서 상태 전이 표의 세 가지만 받는다
+export async function revertDraft(draftId, to) {
+  await delay(400)
+  const d = find(draftId)
+  if (d.submitted_at) throw new ApiError('ALREADY_SUBMITTED', { status: 409, code: 'ALREADY_SUBMITTED' })
+  const writing = d.status === '수정' && d.step === 'writing'
+  const reviewing = d.status === '수정' && d.step === 'review'
+  const completed = d.status === '성공'
+  const allowed = (to === 'prior_info' && writing) || (to === 'writing' && (reviewing || completed))
+  if (!allowed) throw new ApiError('REVERT_NOT_ALLOWED', { status: 409, code: 'REVERT_NOT_ALLOWED' })
+  d.status = '수정'
+  d.step = to
+  return toItem(d)
+}
+
 export async function cancelDraft(draftId) {
   await delay(500)
   const d = find(draftId)

@@ -16,7 +16,7 @@ import {
 } from '@mui/material'
 import { USE_MOCK } from '../api/client.js'
 import { recognizeDocument, REUPLOAD_AVAILABLE } from '../api/documents.js'
-import { cancelDraft, listDrafts, submitDraft } from '../api/drafts.js'
+import { cancelDraft, listDrafts, REVERT_AVAILABLE, revertDraft, submitDraft } from '../api/drafts.js'
 import { useAuth } from '../auth/useAuth.js'
 import { startWriting } from '../api/writing.js'
 import { AlertCircleIcon, ArrowIcon, CheckCircleIcon, DocumentIcon, PenIcon, SearchDocIcon, UploadIcon } from '../components/icons.jsx'
@@ -38,6 +38,7 @@ const ERROR_TEXT = {
   ALREADY_CANCELED: '이미 취소한 작성 건이에요.',
   DRAFT_STEP_INVALID: '이미 글자 인식을 마친 작성 건이에요.',
   DRAFT_NOT_EDITABLE: '반려되었거나 취소된 작성 건이에요.',
+  REVERT_NOT_ALLOWED: '지금 단계에서는 되돌릴 수 없어요. 목록을 새로 불러왔어요.',
   NETWORK_ERROR: '서버 연결 실패. 잠시 후 다시 시도해 주세요.',
 }
 const errorText = (e) => ERROR_TEXT[e?.code] ?? '문제가 생겼어요. 다시 시도해 주세요.'
@@ -114,6 +115,17 @@ const NEXT_ACTION = {
     : { title: '새 파일로 다시 올려 주세요', body: '', cta: '새로 올리기', to: () => '/upload' },
   SUBMIT: { title: '공식 사이트에서 직접 제출해 주세요', body: "제출을 마쳤다면 '제출 완료'를 눌러 기록을 남겨요. 디딤돌은 기관에 아무것도 보내지 않아요." },
   DONE: { title: '할 일을 모두 마쳤어요', body: '제출 기록이 남아 있어요.' },
+}
+
+// 되돌리기 (제안서 상태 전이 표 '되돌릴 수 있나'). next_action → 되돌릴 곳과 버튼 문구
+// - WRITING(작성중) → 사전 정보: 작성하다가 사전 정보 자체가 틀렸음을 발견했을 때
+// - REVIEW(검토완료) → 작성중: 검토 제안을 반영하거나 내용을 다시 고칠 때
+// - SUBMIT(작성완료, 제출 전) → 작성중: 제출 전에 다시 고칠 내용을 발견했을 때
+// 제출 기록이 있는 건(DONE)은 되돌리지 않는다. 가상 작성 입력값은 브라우저에 그대로 남는다
+const REVERT = {
+  WRITING: { to: 'prior_info', label: '사전 정보 고치기', done: '사전 정보 단계로 돌아갔어요.' },
+  REVIEW: { to: 'writing', label: '다시 작성하기', done: '작성 단계로 돌아갔어요. 고친 뒤 다시 검토해 주세요.' },
+  SUBMIT: { to: 'writing', label: '다시 고치기', done: '작성 단계로 돌아갔어요. 고친 뒤 다시 검토해 주세요.' },
 }
 
 const EMPTY_TEXT = {
@@ -254,6 +266,26 @@ export default function DraftListPage() {
     }
   }
 
+  // 되돌리기 (api/drafts.js revertDraft). 확인 창 없이 바로 부른다 — 다시 앞으로 진행하면 되는 동작이다
+  async function handleRevert(draft) {
+    const revert = REVERT[draft.next_action]
+    if (!revert) return
+    setBusyId(draft.id)
+    try {
+      const res = await revertDraft(draft.id, revert.to)
+      setDrafts((list) => list.map((d) => (d.id === res.id ? { ...d, status: res.status, step: res.step, next_action: res.next_action } : d)))
+      // 검토완료 탭에서 되돌렸다면 카드가 사라지지 않게 작성중 탭으로 따라간다
+      setTab((t) => (t === 'reviewed' ? 'writing' : t))
+      setToast({ severity: 'success', text: revert.done })
+    } catch (e) {
+      if (e?.code === 'LOGIN_REQUIRED') setLoggedOut()
+      setToast({ severity: 'error', text: errorText(e) })
+      if (['ALREADY_SUBMITTED', 'REVERT_NOT_ALLOWED', 'DRAFT_NOT_FOUND'].includes(e?.code)) fetchDrafts()
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   // 실서버 모드 PRIOR_INFO 건: 작성 시작(VIRTUAL-FORM-API.md 항목 2) 뒤 가상 작성 화면으로
   async function handleStartWriting(draft) {
     setBusyId(draft.id)
@@ -338,6 +370,7 @@ export default function DraftListPage() {
                   onSubmit={() => setAsk({ type: 'submit', draft: d, open: true })}
                   onRecognize={() => handleRecognize(d)}
                   onStartWriting={() => handleStartWriting(d)}
+                  onRevert={() => handleRevert(d)}
                   onCancel={() => setAsk({ type: 'cancel', draft: d, open: true })}
                 />
               ))}
@@ -486,7 +519,7 @@ function rejectedBody(reason, late) {
 // 올리기 단계가 아닌 곳에서 반려된 건 (다시 올리기로 풀리지 않는다)
 const REJECTED_LATE = { title: '이 작성 건은 더 진행할 수 없어요', body: '' }
 
-function DraftCard({ draft, busy, onSubmit, onRecognize, onStartWriting, onCancel }) {
+function DraftCard({ draft, busy, onSubmit, onRecognize, onStartWriting, onRevert, onCancel }) {
   const category = categoryOf(draft)
   const pill = CATEGORY_PILL[category]
   const isCanceled = category === 'canceled'
@@ -496,6 +529,7 @@ function DraftCard({ draft, busy, onSubmit, onRecognize, onStartWriting, onCance
   const action = lateReject ? REJECTED_LATE : draft.next_action ? NEXT_ACTION[draft.next_action] : null
   const body = draft.next_action === 'REJECTED' ? rejectedBody(draft.reject_reason, lateReject) : action?.body
   const titleId = `draft-${draft.id}-title`
+  const revert = REVERT_AVAILABLE && !draft.submitted_at ? REVERT[draft.next_action] : null
 
   return (
     <Box
@@ -610,7 +644,12 @@ function DraftCard({ draft, busy, onSubmit, onRecognize, onStartWriting, onCance
       )}
 
       {!isCanceled && (
-        <Box sx={{ mt: 1.5, display: 'flex', justifyContent: 'flex-end' }}>
+        <Box sx={{ mt: 1.5, display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+          {revert && (
+            <Button size="small" onClick={onRevert} disabled={busy} sx={{ color: ds.text2 }} aria-label={`작성 건 #${draft.id} ${revert.label}`}>
+              {revert.label}
+            </Button>
+          )}
           {/* 제출한 건은 실제 신청 취소로 오해하지 않게 '기록 지우기'로 부른다 (#109) */}
           <Button
             size="small"
