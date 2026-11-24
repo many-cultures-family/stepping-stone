@@ -2,19 +2,50 @@
 // 오류 판정은 서버 규칙 엔진이 한다. 아래는 저장 버튼을 누르기 전에 미리 보여 주는 보조용이며,
 // 서버가 errors [{ info_key, code }] 를 주면 화면은 그것을 먼저 그린다.
 
-// 서버 규칙(DATA-MODEL.md input_format.pattern)과 같은 형식만 검사한다.
-//   phone: ^010-\d{4}-\d{4}$   date: ^\d{4}\.\d{2}\.\d{2}$ (형식만 본다)
+// 형식 규칙은 서버 input_format 한 벌을 쓴다 (GET /api/input-formats, api/fields.js getInputFormats).
+// 사전 정보 종류 → 칸 형식 코드는 백엔드 llm.PRIOR_INFO_FORMATS(#50)와 같다.
+// 목록을 못 받았을 때(네트워크 오류 등)만 아래 기본 규칙으로 대신 검사한다 (서버 시드와 같은 값).
 // "실제 있는 날짜인가"·"미래가 아닌가" 같은 달력 검사는 서버 규칙에 없어서 화면에서 하지 않는다.
-// 달력 유효성을 서버 규칙(DATA-MODEL.md)에 넣을지는 팀이 정한다. 정해지면 서버·문서와 함께 여기에 같은 규칙을 더한다.
-const PHONE = /^010-\d{4}-\d{4}$/
-const DATE = /^\d{4}\.\d{2}\.\d{2}$/
+export const PRIOR_INFO_FORMATS = { name: 'name', birth_date: 'date', phone: 'phone', address: 'address' }
 
-/** [미리보기 보조] 값 하나의 오류 코드 (없으면 null) */
-export function validatePriorInfo(infoKey, rawValue) {
+const FALLBACK_PATTERNS = {
+  phone: '^010-\\d{4}-\\d{4}$',
+  date: '^\\d{4}\\.\\d{2}\\.\\d{2}$',
+}
+
+// 브라우저가 못 만드는 정규식이면 null: 화면 검사는 건너뛰고 서버가 최종 판정한다
+function toRegExp(pattern) {
+  if (!pattern) return null
+  try {
+    return new RegExp(pattern)
+  } catch {
+    return null
+  }
+}
+
+/** 서버 형식 목록 → { [code]: { pattern: RegExp | null, example } }. 목록이 없으면 null */
+export function indexFormats(formats) {
+  if (!Array.isArray(formats)) return null
+  const result = {}
+  for (const f of formats) {
+    result[f.code] = { pattern: toRegExp(f.pattern), example: f.example ?? '' }
+  }
+  return result
+}
+
+function patternFor(infoKey, formatIndex) {
+  const code = PRIOR_INFO_FORMATS[infoKey]
+  if (!code) return null
+  if (formatIndex) return formatIndex[code]?.pattern ?? null
+  return FALLBACK_PATTERNS[code] ? new RegExp(FALLBACK_PATTERNS[code]) : null
+}
+
+/** [미리보기 보조] 값 하나의 오류 코드 (없으면 null). formatIndex 는 indexFormats 결과 */
+export function validatePriorInfo(infoKey, rawValue, formatIndex = null) {
   const value = (rawValue ?? '').trim()
   if (!value) return 'REQUIRED_MISSING'
-  if (infoKey === 'phone' && !PHONE.test(value)) return 'FORMAT_INVALID'
-  if (infoKey === 'birth_date' && !DATE.test(value)) return 'FORMAT_INVALID'
+  const pattern = patternFor(infoKey, formatIndex)
+  if (pattern && !pattern.test(value)) return 'FORMAT_INVALID'
   return null
 }
 

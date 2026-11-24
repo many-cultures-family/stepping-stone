@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Box, Button, CircularProgress, Typography } from '@mui/material'
-import { USE_MOCK } from './api/client.js'
 import { startWriting } from './api/priorInfo.js'
 import { AuthProvider } from './auth/AuthContext.jsx'
 import { LOGIN_ERROR_MESSAGES } from './auth/loginErrors.js'
@@ -68,7 +67,7 @@ function AppContent() {
           draftId={route.params.draftId}
           file={getPendingFile(route.params.draftId)}
           onDone={() => navigate('/drafts')}
-          onNext={USE_MOCK ? () => navigate(`/drafts/${route.params.draftId}/prior-info`) : undefined}
+          onNext={() => navigate(`/drafts/${route.params.draftId}/prior-info`)}
           onReupload={() => navigate('/upload')}
         />
       )}
@@ -79,20 +78,15 @@ function AppContent() {
           <LoginRequired />
         </Container>
       )}
-      {/* F-03 API 명세가 아직 없어 저장된 사전 정보·저장 동작을 연결하지 않았다.
-          명세가 나오면 여기서 savedInfo·status·serverErrors·onSave·onStartWriting 을 넘기고,
-          작성 건 모드의 requiredKeys 는 이 작성 건 fields 의 prior_info_key 목록으로 바꾼다. */}
-      {/* 사전 정보는 서버 API가 아직 없어 목(VITE_USE_MOCK=true)에서만 연다 */}
-      {USE_MOCK && route.name === 'prior-info' && status === 'authenticated' && (
+      {/* F-03 사전 정보: 서버에 저장하지 않고 브라우저에 둔다(api/priorInfo.js) */}
+      {route.name === 'prior-info' && status === 'authenticated' && (
         <PriorInfoRoute key={route.params.draftId ?? 'manage'} draftId={route.params.draftId} language={user?.language} />
       )}
-      {USE_MOCK && route.name === 'prior-info' && status === 'anonymous' && (
+      {route.name === 'prior-info' && status === 'anonymous' && (
         <Container sx={{ py: 6 }}>
           <LoginRequired />
         </Container>
       )}
-      {/* 실서버 모드에서 북마크·뒤로 가기로 이 경로에 들어와도 빈 화면이 아니라 준비 중 안내를 보여 준다 */}
-      {!USE_MOCK && route.name === 'prior-info' && <ComingSoon title="사전 정보 입력 화면은 준비 중이에요" />}
       {/* F-06 답변 검토 + F-07 개인정보 감지. 목·실서버 모두 연다 (api/review.js) */}
       {route.name === 'review' && status === 'authenticated' && (
         <AnswerReviewRoute key={route.params.draftId} draftId={route.params.draftId} />
@@ -106,9 +100,11 @@ function AppContent() {
   )
 }
 
-// F-03 사전 정보 입력·관리. 데이터·저장은 api/priorInfo.js(목 전용)를 거친다.
+// F-03 사전 정보 입력·관리. 데이터·저장은 api/priorInfo.js(브라우저 보관)를 거친다.
+// 작성 건 모드의 requiredKeys 는 4개 전부다. 이 작성 건 fields 의 prior_info_key 로 줄이려면 prior_info 단계에서 칸 목록을
+// 읽는 API 가 필요한데, 지금 GET .../fields 는 field_check 단계에서만 열린다.
 function PriorInfoRoute({ draftId, language }) {
-  const { loaded, savedInfo, status, errorCode, save, retry } = usePriorInfo()
+  const { loaded, savedInfo, formats, status, errorCode, save, clear, retry } = usePriorInfo()
   const { busy, error, run, clearError } = useSingleFlight()
   if (!loaded) return <Loading />
   return (
@@ -119,14 +115,18 @@ function PriorInfoRoute({ draftId, language }) {
         key={JSON.stringify(savedInfo)}
         language={language}
         savedInfo={savedInfo}
+        formats={formats}
         requiredKeys={draftId ? PRIOR_INFO_KEYS : undefined}
         status={status}
         errorCode={errorCode}
         onSave={save}
+        onClear={clear}
         onRetry={retry}
         onStartWriting={draftId ? () => run(() => startWriting(draftId).then(() => navigate(`/drafts/${draftId}/writing`))) : undefined}
         startingWriting={busy}
-        onBack={() => navigate(draftId ? `/drafts/${draftId}/fields` : '/drafts')}
+        // 항목을 확정하면(prior_info 단계) 항목 확인 화면이 다시 열리지 않으므로 목록으로 돌아간다
+        onBack={() => navigate('/drafts')}
+        backLabel={draftId ? '내 작성 목록으로' : undefined}
       />
     </>
   )
@@ -202,18 +202,6 @@ function ActionError({ error, onClose }) {
       <Alert severity="error" onClose={onClose}>
         {ACTION_ERROR_TEXT[error.code] ?? '문제가 생겼어요. 다시 시도해 주세요.'}
       </Alert>
-    </Container>
-  )
-}
-
-function ComingSoon({ title }) {
-  return (
-    <Container sx={{ py: 6 }}>
-      <Typography variant="h3" component="h1">{title}</Typography>
-      <Typography sx={{ mt: 1, color: 'text.secondary' }}>작성 건은 내 작성 목록에서 이어서 볼 수 있어요.</Typography>
-      <Button variant="contained" size="large" onClick={() => navigate('/drafts')} sx={{ mt: 3 }}>
-        내 작성 목록 보기
-      </Button>
     </Container>
   )
 }

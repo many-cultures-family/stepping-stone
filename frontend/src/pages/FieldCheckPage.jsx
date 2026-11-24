@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Box, Button, ButtonBase, CircularProgress, Collapse, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Skeleton, Snackbar, Stack, Typography } from '@mui/material'
-import { USE_MOCK } from '../api/client.js'
-import { confirmFields, editField, inferFields, requestReanalysis } from '../api/fields.js'
+import { confirmFields, inferFields, requestReanalysis } from '../api/fields.js'
 import { REANALYSIS_LIMIT } from '../api/limits.js'
 import { useAuth } from '../auth/useAuth.js'
 import DocumentPreview from '../components/DocumentPreview.jsx'
-import FieldEditSheet from '../components/FieldEditSheet.jsx'
 import FieldRow from '../components/FieldRow.jsx'
 import TermChips from '../components/explain/TermChips.jsx'
 import { CheckCircleIcon, ChevronIcon, SparkleIcon } from '../components/icons.jsx'
@@ -48,7 +46,6 @@ export default function FieldCheckPage({ draftId, file, onDone, onNext, onReuplo
   const [fields, setFields] = useState([])
   const [serverErrors, setServerErrors] = useState([])
   const [selectedId, setSelectedId] = useState(null)
-  const [editingId, setEditingId] = useState(null)
   const [busy, setBusy] = useState(null) // 'confirm' | 'reanalyze' | null
   const [toast, setToast] = useState(null)
   const [confirmed, setConfirmed] = useState(null)
@@ -109,7 +106,6 @@ export default function FieldCheckPage({ draftId, file, onDone, onNext, onReuplo
   const flaggedIds = fields.filter((f) => f.flagged_wrong).map((f) => f.id)
   const requiredCount = fields.filter((f) => f.required === true).length
   const optionalCount = fields.filter((f) => f.required === false).length
-  const editingField = fields.find((f) => f.id === editingId)
   const reanalysisLeft = draft ? REANALYSIS_LIMIT - draft.reanalysis_count : 0
 
   function select(id) {
@@ -125,17 +121,6 @@ export default function FieldCheckPage({ draftId, file, onDone, onNext, onReuplo
 
   function toggleFlag(id) {
     setFields((prev) => prev.map((f) => (f.id === id ? { ...f, flagged_wrong: !f.flagged_wrong } : f)))
-  }
-
-  // [목 모드 전용] 수정 창 저장. 실서버에는 항목을 고치는 API가 없다
-  function saveField(next) {
-    const flagged = new Set(flaggedIds)
-    const data = editField(draftId, next)
-    setDraft(data.draft)
-    setFields(data.fields.map((f) => ({ ...f, flagged_wrong: flagged.has(f.id) })))
-    setServerErrors(data.errors ?? [])
-    setEditingId(null)
-    setSelectedId(next.id)
   }
 
   async function handleConfirm() {
@@ -308,7 +293,6 @@ export default function FieldCheckPage({ draftId, file, onDone, onNext, onReuplo
                     errors={fieldErrors[f.id]}
                     selected={selectedId === f.id}
                     onSelect={select}
-                    onEdit={setEditingId}
                     onToggleFlag={toggleFlag}
                     disabled={busy !== null}
                     explainSlot={f.label ? <TermChips text={f.label} wholeLabel="항목 이름 풀이" /> : null}
@@ -340,16 +324,6 @@ export default function FieldCheckPage({ draftId, file, onDone, onNext, onReuplo
           </Box>
         </Box>
       </Container>
-
-      {USE_MOCK && editingField && (
-        <FieldEditSheet
-          key={editingField.id}
-          open
-          field={editingField}
-          onClose={() => setEditingId(null)}
-          onSave={saveField}
-        />
-      )}
 
       <Dialog open={reanalyzeAsk} onClose={() => setReanalyzeAsk(false)} aria-labelledby="reanalyze-title">
         <DialogTitle id="reanalyze-title">다시 분석할까요?</DialogTitle>
@@ -408,7 +382,7 @@ function ActionCard({ errorCount, flaggedCount, reanalysisLeft, busy, onReanalyz
           {ready ? '모든 칸을 확인할 수 있어요' : `확인이 필요한 항목 ${errorCount}개`}
         </Typography>
         <Typography variant="caption" sx={{ color: ds.text2 }}>
-          {ready ? '원본과 같다면 확인을 눌러 주세요.' : '빨간 항목의 수정을 눌러 고쳐 주세요.'}
+          {ready ? '원본과 같다면 확인을 눌러 주세요.' : "빨간 항목에 '원본과 달라요'를 켜고 다시 분석해 주세요."}
         </Typography>
       </Box>
       <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>

@@ -14,12 +14,10 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
-import { USE_MOCK } from '../api/client.js'
-import { recognizeDocument, REUPLOAD_AVAILABLE } from '../api/documents.js'
+import { recognizeDocument } from '../api/documents.js'
 import { cancelDraft, listDrafts, submitDraft } from '../api/drafts.js'
 import { useAuth } from '../auth/useAuth.js'
-import { startWriting } from '../api/writing.js'
-import { AlertCircleIcon, ArrowIcon, CheckCircleIcon, DocumentIcon, PenIcon, SearchDocIcon, UploadIcon } from '../components/icons.jsx'
+import { AlertCircleIcon, ArrowIcon, CheckCircleIcon, DocumentIcon, SearchDocIcon, UploadIcon } from '../components/icons.jsx'
 import LoginRequired from '../components/LoginRequired.jsx'
 import PageHero from '../components/PageHero.jsx'
 import { Container, Pill } from '../components/ui.jsx'
@@ -92,26 +90,18 @@ function progressIndex(d) {
 
 // next_action → '다음 할 일' 문구와 이동 경로 (DRAFT-STATUS-API.md 항목 1 표).
 // 버튼은 실제 서버에서 그 화면이 열리는 경우에만 둔다. 막다른 길이면 안내 문구만 보여 준다.
-// - PRIOR_INFO: 실서버 모드는 사전 정보 화면이 없어서 카드에서 바로 작성을 시작한다(writing:start)
-// - REVIEW: 실서버 모드는 검토 화면이 없다. 가상 작성 화면은 review 단계에서도 열리므로(VIRTUAL-FORM-API.md 항목 1) 그리로 보낸다
+// - PRIOR_INFO: 사전 정보 화면으로 보낸다. 사전 정보는 브라우저에 저장하고, 그 화면에서 작성을 시작한다(writing:start)
+// - REVIEW: 서술형 검토 화면(/drafts/:id/review, api/review.js [제안] 경로, #54)으로 보낸다
 // - UPLOAD: 업로드 뒤 글자 인식을 못 마친 건(화면을 닫았거나 인식 요청이 실패). 카드에서 바로 인식을 다시 부른다
 //   (OCR-API.md 항목 1). /fields 로 보내면 409 DRAFT_STEP_INVALID 에 막힌다
-// - REJECTED: 다시 올리기 API 가 있으면(REUPLOAD_AVAILABLE) 같은 작성 건에 다른 파일을 올린다(DATA-MODEL.md "문서 교체").
-//   없으면 새 작성 건으로 올리게 안내한다. 이때 반려 건은 목록에 남으므로 필요 없으면 취소하게 알린다
+// - REJECTED: 같은 작성 건에 다른 파일을 다시 올린다(POST .../document:reupload, DATA-MODEL.md "문서 교체")
 const NEXT_ACTION = {
   UPLOAD: { title: '문서 글자를 읽어야 해요', body: '올린 문서에서 글자를 읽고 개인정보를 가려요. 처음에는 30초쯤 걸릴 수 있어요.' },
   FIELD_CHECK: { title: '입력 항목을 확인해 주세요', body: 'AI가 찾은 칸이 원본과 같은지 확인해요.', cta: '입력 항목 확인하기', to: (id) => `/drafts/${id}/fields` },
-  // 실서버 모드는 사전 정보 화면이 아직 없어서, 카드에서 바로 작성을 시작한다(writing:start). 사전 정보는 작성 화면에서 채우지 않는다
-  PRIOR_INFO: USE_MOCK
-    ? { title: '사전 정보를 입력해 주세요', body: '이름·생년월일처럼 자주 쓰는 정보를 먼저 저장해요.', cta: '사전 정보 입력하기', to: (id) => `/drafts/${id}/prior-info` }
-    : { title: '가상 작성을 시작해 주세요', body: '항목 확인을 마쳤어요. 실제 신청서 위에서 미리 적어 봐요.' },
+  PRIOR_INFO: { title: '사전 정보를 입력해 주세요', body: '이름·생년월일처럼 자주 쓰는 정보를 먼저 저장해요. 저장한 정보는 칸에 미리 채워 드려요.', cta: '사전 정보 입력하기', to: (id) => `/drafts/${id}/prior-info` },
   WRITING: { title: '가상 작성을 이어서 해 주세요', body: '실제 신청서 위에서 미리 적어 봐요.', cta: '가상 작성하기', to: (id) => `/drafts/${id}/writing` },
-  REVIEW: USE_MOCK
-    ? { title: '작성한 내용을 검토해 주세요', body: '빠진 칸과 틀린 형식이 없는지 마지막으로 확인해요.', cta: '답변 검토하기', to: (id) => `/drafts/${id}/review` }
-    : { title: '작성한 내용을 검토해 주세요', body: "가상 작성 화면에서 '빠진 칸·형식 확인'을 눌러 마지막으로 확인해요.", cta: '가상 작성 화면 열기', to: (id) => `/drafts/${id}/writing` },
-  REJECTED: REUPLOAD_AVAILABLE
-    ? { title: '다른 파일로 다시 올려 주세요', body: '', cta: '다시 올리기', to: (id) => `/drafts/${id}/reupload` }
-    : { title: '새 파일로 다시 올려 주세요', body: '', cta: '새로 올리기', to: () => '/upload' },
+  REVIEW: { title: '작성한 내용을 검토해 주세요', body: '빠진 칸과 틀린 형식이 없는지 마지막으로 확인해요.', cta: '답변 검토하기', to: (id) => `/drafts/${id}/review` },
+  REJECTED: { title: '다른 파일로 다시 올려 주세요', body: '', cta: '다시 올리기', to: (id) => `/drafts/${id}/reupload` },
   SUBMIT: { title: '공식 사이트에서 직접 제출해 주세요', body: "제출을 마쳤다면 '제출 완료'를 눌러 기록을 남겨요. 디딤돌은 기관에 아무것도 보내지 않아요." },
   DONE: { title: '할 일을 모두 마쳤어요', body: '제출 기록이 남아 있어요.' },
 }
@@ -254,21 +244,6 @@ export default function DraftListPage() {
     }
   }
 
-  // 실서버 모드 PRIOR_INFO 건: 작성 시작(VIRTUAL-FORM-API.md 항목 2) 뒤 가상 작성 화면으로
-  async function handleStartWriting(draft) {
-    setBusyId(draft.id)
-    try {
-      await startWriting(draft.id)
-      navigate(`/drafts/${draft.id}/writing`)
-    } catch (e) {
-      if (e?.code === 'LOGIN_REQUIRED') setLoggedOut()
-      setToast({ severity: 'error', text: errorText(e) })
-      if (['DRAFT_STEP_INVALID', 'DRAFT_NOT_EDITABLE', 'DRAFT_NOT_FOUND'].includes(e?.code)) fetchDrafts()
-    } finally {
-      setBusyId(null)
-    }
-  }
-
   const askSubmitted = Boolean(ask?.draft?.submitted_at)
 
   const hero = (
@@ -337,7 +312,6 @@ export default function DraftListPage() {
                   busy={busyId === d.id}
                   onSubmit={() => setAsk({ type: 'submit', draft: d, open: true })}
                   onRecognize={() => handleRecognize(d)}
-                  onStartWriting={() => handleStartWriting(d)}
                   onCancel={() => setAsk({ type: 'cancel', draft: d, open: true })}
                 />
               ))}
@@ -479,14 +453,14 @@ function EmptyState({ text, showUpload }) {
 function rejectedBody(reason, late) {
   if (late) return `${rejectText(reason)} 필요 없으면 이 작성 건을 취소해 주세요.`
   const parts = [rejectText(reason), REJECT_HINT[reason]]
-  parts.push(REUPLOAD_AVAILABLE ? '다시 올리면 이 작성 건에서 이어서 진행해요.' : '새로 올리면 작성 건이 하나 더 생겨요. 이 작성 건이 필요 없으면 취소해 주세요.')
+  parts.push('다시 올리면 이 작성 건에서 이어서 진행해요.')
   return parts.filter(Boolean).join(' ')
 }
 
 // 올리기 단계가 아닌 곳에서 반려된 건 (다시 올리기로 풀리지 않는다)
 const REJECTED_LATE = { title: '이 작성 건은 더 진행할 수 없어요', body: '' }
 
-function DraftCard({ draft, busy, onSubmit, onRecognize, onStartWriting, onCancel }) {
+function DraftCard({ draft, busy, onSubmit, onRecognize, onCancel }) {
   const category = categoryOf(draft)
   const pill = CATEGORY_PILL[category]
   const isCanceled = category === 'canceled'
@@ -588,16 +562,6 @@ function DraftCard({ draft, busy, onSubmit, onRecognize, onStartWriting, onCance
                 startIcon={busy ? <CircularProgress size={16} color="inherit" /> : <SearchDocIcon size={18} />}
               >
                 {busy ? '글자 읽는 중' : '글자 인식하기'}
-              </Button>
-            )}
-            {draft.next_action === 'PRIOR_INFO' && !USE_MOCK && (
-              <Button
-                variant="contained"
-                onClick={onStartWriting}
-                disabled={busy}
-                startIcon={busy ? <CircularProgress size={16} color="inherit" /> : <PenIcon size={18} />}
-              >
-                가상 작성 시작
               </Button>
             )}
             {action?.cta && (

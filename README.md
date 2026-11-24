@@ -79,7 +79,7 @@ cp backend/.env.example backend/.env
 `backend/.env`에는 각자 값을 채운다. 이 파일은 커밋하지 않는다.
 **서버는 `.env` 파일을 스스로 읽지 않는다.** 아래 "터미널 1"처럼 서버를 켜기 전에 셸에서 `.env`를 불러와야 값이 적용된다.
 
-3. 화면 라이브러리 설치와 환경 변수 파일 복사. 실서버에 붙이려면 `frontend/.env.local`에서 `VITE_USE_MOCK=false`로 바꾼다.
+3. 화면 라이브러리 설치와 환경 변수 파일 복사. 화면은 항상 실서버(백엔드)를 쓴다.
 
 ```bash
 cd frontend
