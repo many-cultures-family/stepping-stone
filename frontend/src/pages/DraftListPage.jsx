@@ -25,6 +25,7 @@ import PageHero from '../components/PageHero.jsx'
 import { Container, Pill } from '../components/ui.jsx'
 import { navigate } from '../router.js'
 import { ds, radius, squircle } from '../theme.js'
+import { clearDraftInput } from '../utils/browserStore.js'
 import { REJECT_HINT, rejectText } from '../utils/rejectReason.js'
 
 // API 오류 코드 → 문구 (DRAFT-STATUS-API.md 실패 응답). 코드 → 문구는 이 표 한 곳에서만 고른다.
@@ -91,7 +92,8 @@ function progressIndex(d) {
 
 // next_action → '다음 할 일' 문구와 이동 경로 (DRAFT-STATUS-API.md 항목 1 표).
 // 버튼은 실제 서버에서 그 화면이 열리는 경우에만 둔다. 막다른 길이면 안내 문구만 보여 준다.
-// - PRIOR_INFO·WRITING·REVIEW: 화면(경로)이 아직 없다
+// - PRIOR_INFO: 실서버 모드는 사전 정보 화면이 없어서 카드에서 바로 작성을 시작한다(writing:start)
+// - REVIEW: 실서버 모드는 검토 화면이 없다. 가상 작성 화면은 review 단계에서도 열리므로(VIRTUAL-FORM-API.md 항목 1) 그리로 보낸다
 // - UPLOAD: 업로드 뒤 글자 인식을 못 마친 건(화면을 닫았거나 인식 요청이 실패). 카드에서 바로 인식을 다시 부른다
 //   (OCR-API.md 항목 1). /fields 로 보내면 409 DRAFT_STEP_INVALID 에 막힌다
 // - REJECTED: 다시 올리기 API 가 있으면(REUPLOAD_AVAILABLE) 같은 작성 건에 다른 파일을 올린다(DATA-MODEL.md "문서 교체").
@@ -100,9 +102,13 @@ const NEXT_ACTION = {
   UPLOAD: { title: '문서 글자를 읽어야 해요', body: '올린 문서에서 글자를 읽고 개인정보를 가려요. 처음에는 30초쯤 걸릴 수 있어요.' },
   FIELD_CHECK: { title: '입력 항목을 확인해 주세요', body: 'AI가 찾은 칸이 원본과 같은지 확인해요.', cta: '입력 항목 확인하기', to: (id) => `/drafts/${id}/fields` },
   // 실서버 모드는 사전 정보 화면이 아직 없어서, 카드에서 바로 작성을 시작한다(writing:start). 사전 정보는 작성 화면에서 채우지 않는다
-  PRIOR_INFO: { title: '사전 정보를 입력해 주세요', body: USE_MOCK ? '이름·생년월일처럼 자주 쓰는 정보를 먼저 저장해요.' : '사전 정보 입력 화면은 준비 중이에요. 바로 가상 작성을 시작할 수 있어요.', ...(USE_MOCK && { cta: '사전 정보 입력하기', to: (id) => `/drafts/${id}/prior-info` }) },
+  PRIOR_INFO: USE_MOCK
+    ? { title: '사전 정보를 입력해 주세요', body: '이름·생년월일처럼 자주 쓰는 정보를 먼저 저장해요.', cta: '사전 정보 입력하기', to: (id) => `/drafts/${id}/prior-info` }
+    : { title: '가상 작성을 시작해 주세요', body: '항목 확인을 마쳤어요. 실제 신청서 위에서 미리 적어 봐요.' },
   WRITING: { title: '가상 작성을 이어서 해 주세요', body: '실제 신청서 위에서 미리 적어 봐요.', cta: '가상 작성하기', to: (id) => `/drafts/${id}/writing` },
-  REVIEW: { title: '작성한 내용을 검토해 주세요', body: USE_MOCK ? '빠진 칸과 틀린 형식이 없는지 마지막으로 확인해요.' : '빠진 칸과 틀린 형식이 없는지 마지막으로 확인해요. (화면 준비 중)', ...(USE_MOCK && { cta: '답변 검토하기', to: (id) => `/drafts/${id}/review` }) },
+  REVIEW: USE_MOCK
+    ? { title: '작성한 내용을 검토해 주세요', body: '빠진 칸과 틀린 형식이 없는지 마지막으로 확인해요.', cta: '답변 검토하기', to: (id) => `/drafts/${id}/review` }
+    : { title: '작성한 내용을 검토해 주세요', body: "가상 작성 화면에서 '빠진 칸·형식 확인'을 눌러 마지막으로 확인해요.", cta: '가상 작성 화면 열기', to: (id) => `/drafts/${id}/writing` },
   REJECTED: REUPLOAD_AVAILABLE
     ? { title: '다른 파일로 다시 올려 주세요', body: '', cta: '다시 올리기', to: (id) => `/drafts/${id}/reupload` }
     : { title: '새 파일로 다시 올려 주세요', body: '', cta: '새로 올리기', to: () => '/upload' },
@@ -198,6 +204,8 @@ export default function DraftListPage() {
         setToast({ severity: 'success', text: '제출 완료로 기록했어요.' })
       } else {
         const res = await cancelDraft(draft.id)
+        // 서버가 문서·항목을 지우므로(T3) 브라우저에 남은 가상 작성 입력값도 지운다
+        clearDraftInput(res.id)
         setDrafts((list) => list.filter((d) => d.id !== res.id))
         setCanceled((list) => [{ ...draft, status: res.status, next_action: null }, ...list.filter((d) => d.id !== res.id)])
         setTab('canceled')
